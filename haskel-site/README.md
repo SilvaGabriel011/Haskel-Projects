@@ -22,18 +22,28 @@ haskel-site/
 
 ### Opcao B — via GitHub (recomendado pra atualizar depois)
 
-```bash
-cd haskel-site
-git init
-git add .
-git commit -m "landing page"
-git branch -M main
-git remote add origin https://github.com/SEU-USUARIO/haskel-site.git
-git push -u origin main
+O repositorio `Haskel-Projects` ja tem o site dentro da pasta `haskel-site/`,
+entao a raiz do repositorio NAO tem `index.html`. Sem dizer isso pra Vercel o
+deploy quebra com:
+
+```
+Error: No Output Directory named "public" found after the Build completed.
 ```
 
-Na Vercel: **Add New → Project → Import** o repositorio, Framework Preset **Other**, Deploy.
-Depois disso todo `git push` publica sozinho.
+Isso ja esta resolvido pelo `vercel.json` na raiz do repositorio:
+
+```json
+{
+  "outputDirectory": "haskel-site"
+}
+```
+
+Na Vercel: **Add New → Project → Import** o repositorio, Framework Preset
+**Other**, e deixe build command e output directory vazios — o `vercel.json`
+cuida do resto. Depois disso todo `git push` publica sozinho.
+
+Alternativa (sem `vercel.json`): em **Settings → Build and Deployment →
+Root Directory**, coloque `haskel-site`.
 
 ### Dominio proprio
 
