@@ -172,10 +172,15 @@ section{padding:90px 0}
 
 /* why */
 #why{background:var(--white)}
-.why-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px;margin-top:10px}
-.why-item{border-left:3px solid var(--rose);padding:4px 0 4px 20px}
-.why-item h3{font-size:1.08rem;font-weight:700}
-.why-item p{font-size:.92rem;color:var(--ink-2);margin-top:5px}
+.why-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:24px}
+.why-item{
+  background:var(--white);border:1px solid var(--line);border-left:3px solid var(--rose);
+  border-radius:var(--r);padding:30px 28px;
+  transition:transform .2s,box-shadow .2s;
+}
+.why-item:hover{transform:translateY(-5px);box-shadow:0 16px 34px rgba(33,29,31,.09)}
+.why-item h3{font-size:1.18rem;font-weight:700;letter-spacing:-.01em}
+.why-item p{font-size:.95rem;color:var(--ink-2);margin-top:10px;line-height:1.6}
 
 /* contact */
 #contact{background:var(--ink);color:#fff}
@@ -824,24 +829,6 @@ a.review:hover .go span,a.review:focus-visible .go span{transform:translateX(5px
     });
   });
 
-  /* trava a altura no painel mais alto para a pagina nao pular ao trocar de aba */
-  function lockPanelHeight(){
-    if(!panels) return;
-    panels.style.minHeight = '';
-    if(window.innerWidth < 760) return;
-    var tallest = 0, activeId = null;
-    tabs.forEach(function(t){ if(t.getAttribute('aria-selected') === 'true') activeId = t.getAttribute('aria-controls'); });
-    tabs.forEach(function(t){
-      var pn = document.getElementById(t.getAttribute('aria-controls'));
-      if(!pn) return;
-      var wasHidden = pn.hidden;
-      pn.hidden = false;
-      tallest = Math.max(tallest, pn.getBoundingClientRect().height);
-      pn.hidden = wasHidden;
-    });
-    if(activeId) panels.style.minHeight = Math.round(tallest) + 'px';
-  }
-
   /* hash na URL e cliques da nav abrem a aba certa */
   function openFromHash(scroll){
     var id = (location.hash || '').replace('#','');
@@ -867,8 +854,6 @@ a.review:hover .go span,a.review:focus-visible .go span{transform:translateX(5px
 
   if(tabs.length){
     if(!openFromHash(false)) syncNav('services');
-    lockPanelHeight();
-    window.addEventListener('resize', lockPanelHeight, {passive:true});
   }
 
   /* ---------- comparador antes / depois ---------- */
