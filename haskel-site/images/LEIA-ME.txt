@@ -1,0 +1,27 @@
+Coloque as fotos aqui com EXATAMENTE estes nomes:
+
+HERO
+  hero-benchtop.jpg      (foto larga, horizontal, boa qualidade)
+
+MATERIAIS (quadradas, aparecem em circulo)
+  white-truffle.jpg
+  concreto-grigio.jpg
+  sintered-stone.jpg
+  calacatta-gold.jpg
+  nero-assoluto.jpg
+  carrara-mist.jpg
+
+SERVICOS (horizontais, proporcao 4:3)
+  vanity-tops.jpg
+  benchtops.jpg
+  tv-units.jpg
+  master-suite.jpg
+  repairs.jpg
+  cutouts.jpg
+  top-removal.jpg
+  offcuts.jpg
+
+Depois de colocar as fotos, troque no index.html cada bloco
+  <div class="ph"><span>images/nome.jpg</span></div>
+por
+  <img src="images/nome.jpg" alt="descricao">
