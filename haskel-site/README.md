@@ -6,10 +6,20 @@ Site estatico. Uma pagina, sem build, sem dependencia.
 
 ```
 haskel-site/
-├── index.html      site inteiro (HTML + CSS + JS)
+├── index.html      site atual, no ar (HTML + CSS + JS)
 ├── images/         suas fotos (ver images/LEIA-ME.txt)
+├── options/        4 propostas de site de 3 paginas (protótipos, fora do ar)
 └── README.md
 ```
+
+## Propostas de reestruturacao
+
+`options/` tem 4 opcoes de como virar um site de 3 paginas, cada uma com um
+sitemap diferente, um design diferente e um protótipo clicavel. Abra
+`options/index.html` para comparar lado a lado, ou leia `options/README.md`.
+
+Os protótipos nao interferem no site atual: `index.html` continua sendo a pagina
+que esta no ar, e todas as paginas de `options/` levam `noindex`.
 
 ## Deploy na Vercel
 
