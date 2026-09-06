@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Site Options — Haskel Projects</title>
+<meta name="description" content="Four 3-page site structures and design directions for Haskel Projects. Sitemaps, rationale and clickable prototypes.">
+<meta name="robots" content="noindex">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="%23a34d68"/><text x="32" y="44" font-family="Georgia,serif" font-size="30" font-weight="bold" text-anchor="middle" fill="%23fff">H</text></svg>'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@800&family=Playfair+Display:ital,wght@1,500&family=Archivo:wght@800&family=IBM+Plex+Mono:wght@400&family=Cormorant+Garamond:ital,wght@0,400;1,400&family=Jost:wght@300;400&family=Manrope:wght@800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1a1a1c; --ink-2:#5b5d63; --ink-3:#8b8e95;
+  --bg:#f7f6f4; --card:#fff; --line:#e4e2dd;
+  --a:#b04e6c; --b:#b8502a; --c:#6b7566; --d:#0d2b3e; --d-hi:#ffb703;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink);background:var(--bg);
+  line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+
+/* header */
+.top{background:var(--ink);color:#fff;padding:64px 0 58px}
+.top .tag{display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
+  color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.25);padding:7px 14px;border-radius:999px}
+.top h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:800;letter-spacing:-.035em;line-height:1.06;margin:22px 0 0;max-width:20ch}
+.top p{color:rgba(255,255,255,.72);margin-top:18px;max-width:62ch;font-size:1.04rem}
+.top .meta{display:flex;gap:26px;flex-wrap:wrap;margin-top:30px;padding-top:24px;border-top:1px solid rgba(255,255,255,.16);
+  font-size:.85rem;color:rgba(255,255,255,.6)}
+.top .meta b{color:#fff;display:block;font-size:1.35rem;font-weight:800;letter-spacing:-.03em}
+
+section{padding:64px 0}
+.sec-h{max-width:70ch;margin-bottom:38px}
+.sec-h h2{font-size:clamp(1.5rem,3.4vw,2.2rem);font-weight:800;letter-spacing:-.03em}
+.sec-h p{color:var(--ink-2);margin-top:12px}
+
+/* option card */
+.opt{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;margin-bottom:34px}
+.opt-head{padding:30px 34px;border-bottom:1px solid var(--line);display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+.opt-letter{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;color:#fff;
+  font-size:1.6rem;font-weight:800;flex:none}
+.opt-title{flex:1;min-width:220px}
+.opt-title h3{font-size:1.45rem;font-weight:800;letter-spacing:-.03em;line-height:1.15}
+.opt-title .sub{color:var(--ink-2);font-size:.94rem;margin-top:5px}
+.opt-best{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 16px;max-width:330px;
+  font-size:.86rem;color:var(--ink-2)}
+.opt-best b{display:block;font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+
+.opt-body{display:grid;grid-template-columns:1.15fr 1fr;gap:0}
+@media(max-width:900px){.opt-body{grid-template-columns:1fr}}
+.opt-map{padding:32px 34px;border-right:1px solid var(--line)}
+@media(max-width:900px){.opt-map{border-right:none;border-bottom:1px solid var(--line)}}
+.opt-notes{padding:32px 34px}
+
+.lbl{font-size:.66rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin-bottom:16px;display:block}
+
+/* sitemap diagram */
+.map{--accent:var(--a)}
+.map .root{background:var(--ink);color:#fff;border-radius:10px;padding:11px 16px;font-weight:700;font-size:.9rem;
+  display:inline-block}
+.map .branch{margin-top:0;padding-left:22px;border-left:2px solid var(--line);margin-left:16px;padding-top:6px}
+.map .node{position:relative;margin-top:14px}
+.map .node::before{content:"";position:absolute;left:-22px;top:19px;width:16px;height:2px;background:var(--line)}
+.map .node a{display:block;background:var(--bg);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:9px;padding:11px 15px;text-decoration:none;transition:background .16s,border-color .16s}
+.map .node a:hover{background:#fff;border-color:var(--accent);border-left-color:var(--accent)}
+.map .node .n{font-weight:700;font-size:.94rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.map .node .slug{font-size:.7rem;color:var(--ink-3);font-weight:500;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.map .node .cts{color:var(--ink-2);font-size:.83rem;margin-top:5px;line-height:1.5}
+.map .glob{margin-top:18px;font-size:.8rem;color:var(--ink-3);padding-left:16px;border-left:2px dashed var(--line);padding-top:4px;padding-bottom:4px}
+
+/* notes */
+.pill-row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:20px}
+.pill{font-size:.72rem;font-weight:600;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:5px 11px;color:var(--ink-2)}
+.pl{list-style:none;margin-bottom:20px}
+.pl li{position:relative;padding-left:24px;font-size:.9rem;color:var(--ink-2);margin-bottom:8px}
+.pl li::before{position:absolute;left:0;top:0;font-weight:800}
+.pl.pro li::before{content:"+";color:#3f7d4f}
+.pl.con li::before{content:"−";color:#a8503f}
+
+/* design specimen */
+.spec{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:20px}
+.spec .bar{display:flex;height:34px}
+.spec .bar span{flex:1}
+.spec .type{padding:16px 18px;background:#fff}
+.spec .type .h{font-size:1.5rem;letter-spacing:-.03em;line-height:1.1}
+.spec .type .b{font-size:.82rem;color:var(--ink-2);margin-top:7px}
+.spec .type .f{font-size:.68rem;color:var(--ink-3);margin-top:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.spec.fa .h{font-family:'Poppins',sans-serif;font-weight:800;text-transform:lowercase}
+.spec.fa .h em{font-family:'Playfair Display',Georgia,serif;font-weight:500;font-style:italic;text-transform:none}
+.spec.fb .h{font-family:'Archivo',sans-serif;font-weight:800;text-transform:uppercase}
+.spec.fb .b,.spec.fb .f{font-family:'IBM Plex Mono',monospace}
+.spec.fc .h{font-family:'Cormorant Garamond',Georgia,serif;font-weight:400}
+.spec.fc .h em{font-style:italic}
+.spec.fc .b{font-family:'Jost',sans-serif;font-weight:300}
+.spec.fd .h{font-family:'Manrope',sans-serif;font-weight:800}
+
+.view{display:inline-flex;align-items:center;gap:9px;background:var(--ink);color:#fff;text-decoration:none;
+  font-weight:700;font-size:.88rem;padding:13px 22px;border-radius:999px;transition:transform .16s,opacity .16s}
+.view:hover{transform:translateY(-2px);opacity:.9}
+.view span{transition:transform .2s}
+.view:hover span{transform:translateX(4px)}
+
+/* compare table */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:16px;background:#fff}
+table{border-collapse:collapse;width:100%;min-width:720px;font-size:.9rem}
+th,td{text-align:left;padding:15px 18px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--bg);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+tbody tr:last-child td{border-bottom:none}
+td:first-child{font-weight:700;color:var(--ink)}
+td{color:var(--ink-2)}
+
+/* callout */
+.note{background:#fff;border:1px solid var(--line);border-left:4px solid var(--a);border-radius:14px;padding:24px 28px}
+.note h3{font-size:1.05rem;font-weight:800;letter-spacing:-.02em;margin-bottom:10px}
+.note p{color:var(--ink-2);font-size:.92rem}
+.note ul{margin:12px 0 0 20px;color:var(--ink-2);font-size:.9rem}
+.note li{margin-bottom:6px}
+
+footer{background:var(--ink);color:rgba(255,255,255,.6);padding:40px 24px;text-align:center;font-size:.88rem}
+footer a{color:#fff;text-decoration:none}
+:focus-visible{outline:3px solid var(--a);outline-offset:3px;border-radius:6px}
+@media(max-width:560px){
+  .wrap{padding:0 18px}section{padding:48px 0}
+  .opt-head,.opt-map,.opt-notes{padding:24px 22px}
+  .top{padding:48px 0 44px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <span class="tag">Haskel Projects · site restructure</span>
+    <h1>Four ways to turn one landing page into a three-page site</h1>
+    <p>Each option below is a different <strong style="color:#fff">strategy</strong>, not just a different colour scheme. Same business, same phone number, same eight services &mdash; split up four different ways, with a matching design direction and a clickable prototype for each.</p>
+    <div class="meta">
+      <div><b>4</b>options</div>
+      <div><b>3</b>pages each</div>
+      <div><b>12</b>prototype pages</div>
+      <div><b>0</b>build steps</div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h">
+      <h2>How to read this</h2>
+      <p>Pick the <strong>sitemap</strong> first &mdash; that is the decision that actually matters, because it decides what you write and what Google ranks. The design can be swapped onto any of the four structures afterwards.</p>
+    </div>
+    <div class="note">
+      <h3>What is the same in all four</h3>
+      <p>Contact details and a quote form appear on every page (a separate "Contact" page wastes one of your three slots for a business with one phone number). All four keep: the 0451 083 862 click-to-call, the mailto quote form, the 10% first-job offer, the eight services, the six stones, and the free-quote promise.</p>
+      <ul>
+        <li><strong>Mission and values</strong> appear in all four &mdash; the difference is how much room they get.</li>
+        <li><strong>Trade work</strong> appears in all four &mdash; as a section in A, C and D, as a whole page in B.</li>
+        <li>Every prototype is static HTML on the existing Vercel setup. No build, no framework, no dependencies.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+
+    <!-- ============ OPTION A ============ -->
+    <article class="opt">
+      <div class="opt-head">
+        <div class="opt-letter" style="background:var(--a)">A</div>
+        <div class="opt-title">
+          <h3>The Classic Three</h3>
+          <div class="sub">Warm Editorial design · evolution of your current look</div>
+        </div>
+        <div class="opt-best"><b>Best if</b>You want the safest option and the strongest search results for "stone benchtops Adelaide".</div>
+      </div>
+      <div class="opt-body">
+        <div class="opt-map">
+          <span class="lbl">Sitemap</span>
+          <div class="map" style="--accent:var(--a)">
+            <span class="root">haskelprojects.com.au</span>
+            <div class="branch">
+              <div class="node"><a href="a/index.html">
+                <span class="n">Home <span class="slug">/</span></span>
+                <span class="cts">Hero · top 3 services · 10% offer · who you're dealing with · 4-step process · service area</span>
+              </a></div>
+              <div class="node"><a href="a/services.html">
+                <span class="n">Services &amp; Stone <span class="slug">/services</span></span>
+                <span class="cts">All 8 services · all 6 stones · recent work · lead capture</span>
+              </a></div>
+              <div class="node"><a href="a/about.html">
+                <span class="n">About <span class="slug">/about</span></span>
+                <span class="cts">Story · <strong>mission</strong> · <strong>5 values</strong> · <strong>trade work</strong> · contact + quote form</span>
+              </a></div>
+            </div>
+            <div class="glob">Global: sticky nav · click-to-call · footer contact</div>
+          </div>
+        </div>
+        <div class="opt-notes">
+          <span class="lbl">Design direction</span>
+          <div class="spec fa">
+            <div class="bar"><span style="background:#fbf7f4"></span><span style="background:#f7e6ea"></span><span style="background:#b04e6c"></span><span style="background:#211d1f"></span></div>
+            <div class="type">
+              <div class="h">small jobs, done <em>properly</em></div>
+              <div class="b">Cream and blush, rounded cards, soft shadows, italic serif accents.</div>
+              <div class="f">Poppins 800 + Playfair Display italic</div>
+            </div>
+          </div>
+          <div class="pill-row"><span class="pill">Familiar</span><span class="pill">Warm</span><span class="pill">Homeowner-facing</span></div>
+          <ul class="pl pro">
+            <li>Keeps everything you have already built. Nothing to relearn.</li>
+            <li>One dense services page is the easiest thing to rank on Google.</li>
+            <li>About page carries mission, values and trade in one place.</li>
+          </ul>
+          <ul class="pl con">
+            <li>Trade clients get a section, not a page &mdash; weaker B2B signal.</li>
+            <li>Least differentiated from every other stonemason site.</li>
+          </ul>
+          <a class="view" href="a/index.html">Open prototype A <span aria-hidden="true">&rarr;</span></a>
+        </div>
+      </div>
+    </article>
+
+    <!-- ============ OPTION B ============ -->
+    <article class="opt">
+      <div class="opt-head">
+        <div class="opt-letter" style="background:var(--b)">B</div>
+        <div class="opt-title">
+          <h3>Two Doors</h3>
+          <div class="sub">Workshop design · industrial, spec-sheet feel</div>
+        </div>
+        <div class="opt-best"><b>Best if</b>Trade work (builders, cabinet makers, kitchen companies) is or could be a real second income line.</div>
+      </div>
+      <div class="opt-body">
+        <div class="opt-map">
+          <span class="lbl">Sitemap</span>
+          <div class="map" style="--accent:var(--b)">
+            <span class="root">haskelprojects.com.au</span>
+            <div class="branch">
+              <div class="node"><a href="b/index.html">
+                <span class="n">Home <span class="slug">/</span></span>
+                <span class="cts">Hero + spec strip · <strong>the fork</strong>: home vs trade · <strong>mission &amp; 5 values</strong> · capability table</span>
+              </a></div>
+              <div class="node"><a href="b/residential.html">
+                <span class="n">For Your Home <span class="slug">/residential</span></span>
+                <span class="cts">6 homeowner services · stone spec table · process · quote form</span>
+              </a></div>
+              <div class="node"><a href="b/trade.html">
+                <span class="n">For Trade <span class="slug">/trade</span></span>
+                <span class="cts">6 trade capabilities · <strong>terms &amp; credentials</strong> · workflow · trade enquiry form</span>
+              </a></div>
+            </div>
+            <div class="glob">Global: sticky nav · click-to-call · footer contact</div>
+          </div>
+        </div>
+        <div class="opt-notes">
+          <span class="lbl">Design direction</span>
+          <div class="spec fb">
+            <div class="bar"><span style="background:#f6f5f2"></span><span style="background:#e9e7e2"></span><span style="background:#b8502a"></span><span style="background:#16181a"></span></div>
+            <div class="type">
+              <div class="h">Small jobs, <em style="font-style:normal;color:#b8502a">done properly</em></div>
+              <div class="b">Concrete grey, rust accent, square corners, numbered sections, spec tables.</div>
+              <div class="f">Archivo 800 + IBM Plex Mono</div>
+            </div>
+          </div>
+          <div class="pill-row"><span class="pill">Industrial</span><span class="pill">Credible</span><span class="pill">Trade-facing</span></div>
+          <ul class="pl pro">
+            <li>Two audiences stop competing for the same paragraph.</li>
+            <li>Trade page can carry ABN, insurance and terms &mdash; what builders check first.</li>
+            <li>The spec-sheet look reads as "tradesperson", not "marketing".</li>
+          </ul>
+          <ul class="pl con">
+            <li>Homepage asks a question instead of selling &mdash; costs a click.</li>
+            <li>Only worth it if you actually want trade work.</li>
+            <li>Biggest visual departure from your current brand.</li>
+          </ul>
+          <a class="view" href="b/index.html">Open prototype B <span aria-hidden="true">&rarr;</span></a>
+        </div>
+      </div>
+    </article>
+
+    <!-- ============ OPTION C ============ -->
+    <article class="opt">
+      <div class="opt-head">
+        <div class="opt-letter" style="background:var(--c)">C</div>
+        <div class="opt-title">
+          <h3>The Craft</h3>
+          <div class="sub">Gallery design · premium, architectural</div>
+        </div>
+        <div class="opt-best"><b>Best if</b>You want to charge more and attract design-led renovations rather than compete on price.</div>
+      </div>
+      <div class="opt-body">
+        <div class="opt-map">
+          <span class="lbl">Sitemap</span>
+          <div class="map" style="--accent:var(--c)">
+            <span class="root">haskelprojects.com.au</span>
+            <div class="branch">
+              <div class="node"><a href="c/index.html">
+                <span class="n">Home <span class="slug">/</span></span>
+                <span class="cts">Full-bleed hero · <strong>mission</strong> · selected work gallery · belief panel · capability list</span>
+              </a></div>
+              <div class="node"><a href="c/craft.html">
+                <span class="n">The Craft <span class="slug">/craft</span></span>
+                <span class="cts">Story · <strong>5 values as a manifesto</strong> · stone library · process · trade panel</span>
+              </a></div>
+              <div class="node"><a href="c/project.html">
+                <span class="n">Start a Project <span class="slug">/project</span></span>
+                <span class="cts">All 8 services · trade section · <strong>FAQ</strong> · enquiry form</span>
+              </a></div>
+            </div>
+            <div class="glob">Global: sticky nav · click-to-call · footer contact</div>
+          </div>
+        </div>
+        <div class="opt-notes">
+          <span class="lbl">Design direction</span>
+          <div class="spec fc">
+            <div class="bar"><span style="background:#f4f2ee"></span><span style="background:#eae7e0"></span><span style="background:#6b7566"></span><span style="background:#191a17"></span></div>
+            <div class="type">
+              <div class="h">Small jobs, <em>done properly</em></div>
+              <div class="b">Bone and sage, hairline rules, huge whitespace, full-bleed photography.</div>
+              <div class="f">Cormorant Garamond + Jost</div>
+            </div>
+          </div>
+          <div class="pill-row"><span class="pill">Premium</span><span class="pill">Editorial</span><span class="pill">Photo-hungry</span></div>
+          <ul class="pl pro">
+            <li>Mission and values get the most room of any option &mdash; it is the whole middle page.</li>
+            <li>Justifies higher pricing; attracts architects and designers.</li>
+            <li>FAQ page quietly filters out the wrong enquiries before they reach your phone.</li>
+          </ul>
+          <ul class="pl con">
+            <li><strong>Needs genuinely good photography.</strong> This design fails hardest with weak images.</li>
+            <li>Softer on urgency &mdash; fewer "call now" prompts than D.</li>
+            <li>"Start a Project" reads less clearly than "Services" to a Google searcher.</li>
+          </ul>
+          <a class="view" href="c/index.html">Open prototype C <span aria-hidden="true">&rarr;</span></a>
+        </div>
+      </div>
+    </article>
+
+    <!-- ============ OPTION D ============ -->
+    <article class="opt">
+      <div class="opt-head">
+        <div class="opt-letter" style="background:var(--d)">D</div>
+        <div class="opt-title">
+          <h3>The Offer</h3>
+          <div class="sub">Bold design · conversion-first, offcut-led</div>
+        </div>
+        <div class="opt-best"><b>Best if</b>You want the phone to ring today, and the offcut rack is a hook you can keep up to date.</div>
+      </div>
+      <div class="opt-body">
+        <div class="opt-map">
+          <span class="lbl">Sitemap</span>
+          <div class="map" style="--accent:var(--d)">
+            <span class="root">haskelprojects.com.au</span>
+            <div class="branch">
+              <div class="node"><a href="d/index.html">
+                <span class="n">Home <span class="slug">/</span></span>
+                <span class="cts">Offer hero · 3 money-savers · top 4 services · <strong>offcut rack</strong> · <strong>5 values</strong> · process</span>
+              </a></div>
+              <div class="node"><a href="d/stone.html">
+                <span class="n">Stone &amp; Offcuts <span class="slug">/stone</span></span>
+                <span class="cts">6 stones with specs · <strong>live offcut rack</strong> · what-suits-what guide</span>
+              </a></div>
+              <div class="node"><a href="d/jobs.html">
+                <span class="n">Jobs &amp; Repairs <span class="slug">/jobs</span></span>
+                <span class="cts">All 8 services · repair types · <strong>trade work</strong> · contact + quote form</span>
+              </a></div>
+            </div>
+            <div class="glob">Global: sticky nav · offer strip · <strong>sticky mobile call bar</strong> · footer contact</div>
+          </div>
+        </div>
+        <div class="opt-notes">
+          <span class="lbl">Design direction</span>
+          <div class="spec fd">
+            <div class="bar"><span style="background:#fffaf2"></span><span style="background:#fdf1dd"></span><span style="background:#ffb703"></span><span style="background:#0d2b3e"></span></div>
+            <div class="type">
+              <div class="h">Small jobs, <em style="font-style:normal;background:#ffb703;padding:0 .15em;border-radius:4px">done properly</em></div>
+              <div class="b">Navy and amber, chunky buttons, badges, oversized numbers, sticky call bar.</div>
+              <div class="f">Manrope 800</div>
+            </div>
+          </div>
+          <div class="pill-row"><span class="pill">Loud</span><span class="pill">Conversion-first</span><span class="pill">Mobile-led</span></div>
+          <ul class="pl pro">
+            <li>Highest expected call rate. Offer is visible on every screen.</li>
+            <li>Sticky mobile call bar &mdash; most of your traffic is a phone in a kitchen.</li>
+            <li>The offcut rack is a genuine reason for people to come back.</li>
+          </ul>
+          <ul class="pl con">
+            <li><strong>The rack needs updating every week or two</strong> or it costs you trust.</li>
+            <li>Reads cheaper. Harder to charge a premium.</li>
+            <li>Furthest from the calm, warm tone you have now.</li>
+          </ul>
+          <a class="view" href="d/index.html">Open prototype D <span aria-hidden="true">&rarr;</span></a>
+        </div>
+      </div>
+    </article>
+
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-h">
+      <h2>Side by side</h2>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>&nbsp;</th><th>A · Classic Three</th><th>B · Two Doors</th><th>C · The Craft</th><th>D · The Offer</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Page 2</td><td>Services &amp; Stone</td><td>For Your Home</td><td>The Craft</td><td>Stone &amp; Offcuts</td></tr>
+          <tr><td>Page 3</td><td>About</td><td>For Trade</td><td>Start a Project</td><td>Jobs &amp; Repairs</td></tr>
+          <tr><td>Mission &amp; values</td><td>About page</td><td>Homepage block</td><td>Whole middle page</td><td>Homepage block</td></tr>
+          <tr><td>Trade work</td><td>Section on About</td><td><strong>Own page</strong></td><td>Panel + section</td><td>Section on Jobs</td></tr>
+          <tr><td>Search strength</td><td><strong>Strongest</strong></td><td>Good (two intents)</td><td>Weakest slugs</td><td>Good</td></tr>
+          <tr><td>Photos needed</td><td>Medium</td><td>Low &mdash; type carries it</td><td><strong>High</strong></td><td>Medium</td></tr>
+          <tr><td>Ongoing upkeep</td><td>Low</td><td>Low</td><td>Low</td><td><strong>Weekly (rack)</strong></td></tr>
+          <tr><td>Change from today</td><td>Smallest</td><td>Large</td><td>Large</td><td>Largest</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="note" style="border-left-color:var(--b)">
+      <h3>Before any of these goes live</h3>
+      <p>Each prototype has fields only you can fill in. They are marked <strong>PLACEHOLDER</strong> in the pages so nothing invented reaches a customer:</p>
+      <ul>
+        <li><strong>ABN, licence and public liability cover</strong> &mdash; trade clients check these first (biggest gap in B).</li>
+        <li><strong>Silica compliance</strong> &mdash; worth stating explicitly in South Australia.</li>
+        <li><strong>Real reviews, real job names and suburbs</strong> &mdash; all sample text is currently generic.</li>
+        <li><strong>Photos</strong> &mdash; every image is still a grey placeholder box, per <code>images/LEIA-ME.txt</code>.</li>
+        <li><strong>Turnaround and pricing</strong> &mdash; the FAQ in C and the rack in D both have blanks for these.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Prototypes for <b style="color:#fff">Haskel Projects Pty</b> · none of these are live · your current site is still at <a href="../index.html">/</a></p>
+</footer>
+
+</body>
+</html>
