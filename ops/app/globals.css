@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/*
+ * Brand tokens are lifted from haskel-site/styles.css so the back office reads
+ * as the same company as the public page. Do not invent a second palette here.
+ */
+@theme {
+  --color-ink: #211d1f;
+  --color-ink-2: #5d5458;
+  --color-rose: #b04e6c;
+  --color-rose-deep: #8f3c56;
+  --color-blush: #f7e6ea;
+  --color-blush-2: #fbf1f3;
+  --color-cream: #fbf7f4;
+  --color-sand: #f0e7df;
+  --color-line: #e6dcd8;
+  --color-muted: #9c9294;
+
+  --font-sans: "Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Playfair Display", Georgia, serif;
+
+  --radius-brand: 22px;
+}
+
+html {
+  background: var(--color-cream);
+}
+
+body {
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The site's display treatment: tight, lowercase, heavy. */
+.dsp {
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  text-transform: lowercase;
+  text-wrap: balance;
+}
+
+.it {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+:focus-visible {
+  outline: 2.5px solid var(--color-rose);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
