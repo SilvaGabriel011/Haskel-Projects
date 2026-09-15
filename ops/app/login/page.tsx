@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { auth, signIn } from "@/auth";
-import { demoModeEnabled, STAFF, workspaceDomain } from "@/lib/staff";
+import { demoModeEnabled, listStaff, workspaceDomain, type Staff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -87,7 +87,7 @@ export default async function LoginPage({
             </button>
           </form>
 
-          {demo ? <DemoSignIn /> : null}
+          {demo ? <DemoSignIn staff={await listStaff()} /> : null}
         </div>
       </div>
     </main>
@@ -98,7 +98,7 @@ export default async function LoginPage({
  * Password sign-in for the seeded demo accounts. Rendered only while
  * DEMO_MODE is true; with it off, the provider does not exist at all.
  */
-function DemoSignIn() {
+function DemoSignIn({ staff }: { staff: Staff[] }) {
   return (
     <div className="mt-10 border-t border-line pt-8">
       <div className="flex items-center gap-2">
@@ -129,10 +129,10 @@ function DemoSignIn() {
         <select
           id="demo-email"
           name="email"
-          defaultValue={STAFF[0].email}
+          defaultValue={staff[0]?.email}
           className="rounded-xl border border-line bg-white px-4 py-3 text-sm"
         >
-          {STAFF.map((s) => (
+          {staff.map((s) => (
             <option key={s.email} value={s.email}>
               {s.name} — {s.role === "ADMIN" ? "admin" : "employee"}
             </option>

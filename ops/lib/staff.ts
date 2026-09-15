@@ -1,47 +1,42 @@
 /**
- * The staff list.
+ * The staff list — now backed by the User table.
  *
- * Phase 1 keeps people in code so the system runs with no database to set up.
- * Phase 2 moves this to a `User` table; everything else reads through
- * `findStaffByEmail`, so that swap touches this file only.
+ * IMPORTANT: everything here touches Prisma, so none of it can run on the edge
+ * runtime. The middleware (proxy.ts) must not import this file. It doesn't need
+ * to: the role is stamped onto the JWT during sign-in, which runs on the Node
+ * runtime, and the middleware only reads the token.
  */
-import type { Role } from "./roles";
+import "server-only";
+
+import type { Role } from "@prisma/client";
+
+import { db } from "@/lib/db";
 
 export type Staff = {
+  id: string;
   email: string;
   name: string;
   role: Role;
-  /** Env var holding this person's demo password hash. Demo accounts only. */
-  passwordEnv?: string;
+  active: boolean;
 };
 
-const DOMAIN_PLACEHOLDER = "haskelprojects.com.au";
-
-export const STAFF: readonly Staff[] = [
-  {
-    email: `admin@${DOMAIN_PLACEHOLDER}`,
-    name: "Gabriel Silva",
-    role: "ADMIN",
-    passwordEnv: "DEMO_ADMIN_PASSWORD_HASH",
-  },
-  {
-    email: `installer@${DOMAIN_PLACEHOLDER}`,
-    name: "Dave Whitlock",
-    role: "EMPLOYEE",
-    passwordEnv: "DEMO_INSTALLER_PASSWORD_HASH",
-  },
-  {
-    email: `apprentice@${DOMAIN_PLACEHOLDER}`,
-    name: "Sam Reid",
-    role: "EMPLOYEE",
-    passwordEnv: "DEMO_APPRENTICE_PASSWORD_HASH",
-  },
-] as const;
-
-export function findStaffByEmail(email: string | null | undefined): Staff | null {
+/** Look someone up by email. Inactive people are treated as absent. */
+export async function findStaffByEmail(email: string | null | undefined): Promise<Staff | null> {
   if (!email) return null;
-  const needle = email.trim().toLowerCase();
-  return STAFF.find((s) => s.email.toLowerCase() === needle) ?? null;
+  const user = await db.user.findUnique({
+    where: { email: email.trim().toLowerCase() },
+    select: { id: true, email: true, name: true, role: true, active: true },
+  });
+  if (!user || !user.active) return null;
+  return user;
+}
+
+export async function listStaff(): Promise<Staff[]> {
+  return db.user.findMany({
+    where: { active: true },
+    select: { id: true, email: true, name: true, role: true, active: true },
+    orderBy: [{ role: "asc" }, { name: "asc" }],
+  });
 }
 
 /** True when demo password sign-in is switched on. */
@@ -56,4 +51,13 @@ export function demoModeEnabled(): boolean {
 export function workspaceDomain(): string | null {
   const d = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim();
   return d ? d.toLowerCase() : null;
+}
+
+/**
+ * Which env var holds a given account's demo password hash. Demo mode only —
+ * derived from the local part of the email so the mapping needs no table.
+ */
+export function demoPasswordEnvFor(email: string): string | null {
+  const local = email.split("@")[0]?.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+  return local ? `DEMO_${local}_PASSWORD_HASH` : null;
 }
