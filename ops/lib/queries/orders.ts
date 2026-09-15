@@ -100,3 +100,97 @@ export async function revenueByMonth(from: Date) {
     orderBy: { completedAt: "asc" },
   });
 }
+
+// --------------------------------------------------------------- the boards
+
+/**
+ * One pipeline's board, grouped by stage.
+ *
+ * Two pipelines means two boards, which is what was asked for — but they read
+ * from the same table, so `revenueByMonth` above still sees all of it.
+ */
+export async function ordersBoard<R extends Role>(role: R, pipeline: Prisma.OrderWhereInput["pipeline"]) {
+  const orders = await db.order.findMany({
+    where: { pipeline, status: { not: "LOST" } },
+    select: selectFor(role),
+    orderBy: { createdAt: "desc" },
+  });
+  return orders as OrderForRole<R>[];
+}
+
+/** Counts per pipeline, for the toggle. */
+export async function pipelineCounts() {
+  const [short, full, lost] = await Promise.all([
+    db.order.count({ where: { pipeline: "SHORT", status: { not: "LOST" } } }),
+    db.order.count({ where: { pipeline: "FULL", status: { not: "LOST" } } }),
+    db.order.count({ where: { status: "LOST" } }),
+  ]);
+  return { short, full, lost };
+}
+
+/*
+ * Everything on one job.
+ *
+ * Written as two explicit selects rather than one with conditional spreads:
+ * spreading `...(admin ? {...} : {})` into a Prisma select collapses the
+ * inferred type to `unknown`, which loses exactly the compile-time protection
+ * this layer exists to provide.
+ */
+
+const DETAIL_LINES_SHARED = {
+  id: true, description: true, sqm: true, labourHours: true,
+  material: { select: { name: true, finish: true, thicknessMm: true } },
+  slab: { select: { id: true, ref: true, rack: true } },
+  offcut: { select: { id: true, ref: true, rack: true, widthMm: true, lengthMm: true } },
+} satisfies Prisma.OrderLineSelect;
+
+const DETAIL_EXTRAS = {
+  events: {
+    select: {
+      id: true, kind: true, startAt: true, endAt: true, address: true,
+      assignees: { select: { user: { select: { id: true, name: true } } } },
+    },
+    orderBy: { startAt: "asc" },
+  },
+  movements: {
+    select: {
+      id: true, kind: true, note: true, createdAt: true,
+      user: { select: { name: true } },
+      slab: { select: { id: true, ref: true } },
+      offcut: { select: { id: true, ref: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  },
+} satisfies Prisma.OrderSelect;
+
+const DETAIL_ADMIN = {
+  ...ADMIN_ORDER_SELECT,
+  ...DETAIL_EXTRAS,
+  customer: { select: { id: true, name: true, phone: true, suburb: true, email: true, source: true } },
+  lines: { select: { ...DETAIL_LINES_SHARED, unitPriceCents: true, lineTotalCents: true } },
+} satisfies Prisma.OrderSelect;
+
+const DETAIL_EMPLOYEE = {
+  ...SHARED_ORDER_SELECT,
+  ...DETAIL_EXTRAS,
+  customer: { select: { id: true, name: true, phone: true, suburb: true } },
+  lines: { select: DETAIL_LINES_SHARED },
+} satisfies Prisma.OrderSelect;
+
+export type OrderDetailAdmin = Prisma.OrderGetPayload<{ select: typeof DETAIL_ADMIN }>;
+export type OrderDetailEmployee = Prisma.OrderGetPayload<{ select: typeof DETAIL_EMPLOYEE }>;
+
+export type OrderDetailForRole<R extends Role> = R extends "ADMIN"
+  ? OrderDetailAdmin
+  : OrderDetailEmployee;
+
+export async function getOrderDetail<R extends Role>(
+  id: string,
+  role: R,
+): Promise<OrderDetailForRole<R> | null> {
+  const row =
+    role === "ADMIN"
+      ? await db.order.findUnique({ where: { id }, select: DETAIL_ADMIN })
+      : await db.order.findUnique({ where: { id }, select: DETAIL_EMPLOYEE });
+  return row as OrderDetailForRole<R> | null;
+}

@@ -101,6 +101,17 @@ export function canTransition(
   return { ok: true };
 }
 
+/**
+ * Stages only an admin may set. An installer can move work along the bench —
+ * cutting, installed, complete — but cannot decide what a job is worth or
+ * write it off.
+ */
+const ADMIN_ONLY_STAGES: readonly OrderStatus[] = ["QUOTED", "WON", "LOST"];
+
+export function requiresAdmin(to: OrderStatus): boolean {
+  return ADMIN_ONLY_STAGES.includes(to);
+}
+
 /** Human labels. The UI should never show a raw enum. */
 export const STATUS_LABEL: Record<OrderStatus, string> = {
   ENQUIRY: "Enquiry",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { canTransition, nextStage, phase, STAGES } from "../lib/pipeline";
+import { canTransition, nextStage, phase, requiresAdmin, STAGES } from "../lib/pipeline";
 
 describe("pipeline stages", () => {
   it("short pipeline skips the template and fabricate steps", () => {
@@ -71,6 +71,20 @@ describe("phase — what makes two pipelines reportable as one", () => {
   it("gives every status in both pipelines a phase", () => {
     for (const p of ["SHORT", "FULL"] as const) {
       for (const s of STAGES[p]) assert.ok(phase(s));
+    }
+  });
+});
+
+describe("who may set which stage", () => {
+  it("pricing and writing a job off are admin-only", () => {
+    for (const s of ["QUOTED", "WON", "LOST"] as const) {
+      assert.equal(requiresAdmin(s), true, `${s} should be admin-only`);
+    }
+  });
+
+  it("moving work along the bench is not", () => {
+    for (const s of ["CUTTING", "TEMPLATED", "FABRICATING", "SCHEDULED", "INSTALLED", "COMPLETE"] as const) {
+      assert.equal(requiresAdmin(s), false, `${s} should be open to an installer`);
     }
   });
 });
