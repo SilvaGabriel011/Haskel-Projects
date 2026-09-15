@@ -243,15 +243,23 @@ async function main() {
     });
     orders.push(order);
 
-    // One line, referencing real stock where it makes sense.
+    // One line, referencing real stock. Offcut jobs consume an offcut; everything
+    // else consumes a slab — either way the movement log names a real item.
     const usedOffcut = isOffcutJob && availableOffcuts.length ? pick(availableOffcuts) : null;
     const material = usedOffcut ? materials.find((m) => m.id === usedOffcut.materialId)! : pick(materials);
+    const usedSlab = usedOffcut
+      ? null
+      : (() => {
+          const ofMaterial = slabs.filter((sl) => sl.materialId === material.id);
+          return ofMaterial.length ? pick(ofMaterial) : pick(slabs);
+        })();
     await db.orderLine.create({
       data: {
         orderId: order.id,
         description: usedOffcut ? `${material.name} offcut ${usedOffcut.ref}, cut to size` : `${material.name}, cut and polished`,
         materialId: material.id,
         offcutId: usedOffcut?.id ?? null,
+        slabId: usedSlab?.id ?? null,
         sqm, labourHours: hours,
         unitPriceCents: rate,
         lineTotalCents: quoteCents,
@@ -263,6 +271,7 @@ async function main() {
         data: {
           kind: done ? "CONSUMED" : "RESERVED",
           offcutId: usedOffcut?.id ?? null,
+          slabId: usedSlab?.id ?? null,
           userId: pick(staff).id, orderId: order.id,
           note: `${order.jobNumber} — ${jobType.toLowerCase().replace(/_/g, " ")}`,
           createdAt: order.wonAt!,
