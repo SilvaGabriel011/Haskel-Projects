@@ -1,4 +1,5 @@
 import { signOut } from "@/auth";
+import { DemoBanner } from "@/components/demo-banner";
 import { Sidebar } from "@/components/sidebar";
 import { requireUser } from "@/lib/guard";
 import { sectionsFor } from "@/lib/roles";
@@ -9,7 +10,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const isAdmin = user.role === "ADMIN";
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[290px_1fr]">
+    <>
+      <DemoBanner />
+      <div className="min-h-dvh lg:grid lg:grid-cols-[290px_1fr]">
       <aside className="border-b border-line bg-white p-5 lg:border-b-0 lg:border-r lg:min-h-dvh">
         <div className="flex items-center gap-3">
           <div className="grid place-items-center w-9 h-9 rounded-lg bg-rose font-bold text-white">
@@ -56,7 +59,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main className="p-6 sm:p-10">{children}</main>
-    </div>
+        <main className="p-6 sm:p-10">{children}</main>
+      </div>
+    </>
   );
 }

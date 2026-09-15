@@ -15,12 +15,12 @@ The two deploy independently and neither can break the other.
 | 2 | Database schema and demo data | Done |
 | 3 | Stock (slabs, offcuts, consumables) | Done |
 | 4 | Orders (two pipelines) | Done |
-| 5 | Scheduling | **Week view done; Google sync pending credentials** |
-| 6 | Financial dashboards | Next |
-| 7 | Hardening and handover | |
+| 5 | Scheduling | Week view done; **Google sync still pending your credentials** |
+| 6 | Financial dashboards | Done |
+| 7 | Hardening and handover | Done |
 
-Stock, offcuts, orders and the schedule run on real (seeded) data. Financials
-and settings are still shells.
+Stock, offcuts, orders, the schedule and the financials all run on real
+(seeded) data. Settings is the last shell.
 
 **Google Calendar sync is deliberately not implemented yet.** The half that can
 be tested without Google — turning a booking into a calendar event, with the
@@ -94,6 +94,21 @@ passwords are never written to disk.
 > The hash format uses `:` separators, not `$`. A `$` inside a `.env` value is
 > read as a variable reference and silently expanded away — locally and in
 > Vercel's environment variables alike.
+
+## Before this goes live — read this
+
+Two switches decide who can get in. Both now fail CLOSED, and both shout while
+they are wrong, but they are still yours to set.
+
+| Variable | Until you set it |
+|---|---|
+| `GOOGLE_WORKSPACE_DOMAIN` | **Google sign-in is refused outright in production.** Sign-in cannot be limited to your company without it, so it refuses rather than letting anyone through. Local development is unaffected. |
+| `DEMO_MODE` | Ships as `false`. While it is `true`, anyone with a demo password can sign in, and every page carries a banner saying so. |
+
+These used to fail open — an unset domain meant the check was skipped, and
+`.env.example` shipped `DEMO_MODE=true`, so copying it handed a deployment a
+working password login. Both are now the other way round, and
+`tests/fail-closed.test.ts` keeps them that way.
 
 ## Two things only you can do
 
