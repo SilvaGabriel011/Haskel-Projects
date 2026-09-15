@@ -1,0 +1,320 @@
+// Haskel Ops — schema.
+//
+// Two rules that run through all of this:
+//
+//  1. MONEY IS INTEGER CENTS. Never a float, never a Decimal. Field names carry
+//     the unit (quoteCents, costPerSqmCents) so a bare number is never ambiguous.
+//  2. ONE ORDER TABLE, TWO PIPELINES. Offcut and small jobs run a short pipeline,
+//     benchtop installs the full one, but both are rows in `Order` with a shared
+//     status enum and a `pipeline` discriminator. That is what lets the financials
+//     report across both from a single query — see lib/pipeline.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------- people
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(EMPLOYEE)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  movements StockMovement[]
+  shifts    ScheduleAssignee[]
+
+  @@index([active])
+}
+
+// ---------------------------------------------------------------- stock
+
+enum MaterialKind {
+  ENGINEERED
+  NATURAL
+  SINTERED
+}
+
+enum SlabStatus {
+  IN_STOCK
+  RESERVED
+  CUT // broken down; offcuts may remain
+  SOLD
+}
+
+enum OffcutStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+model Material {
+  id              String       @id @default(cuid())
+  name            String       @unique
+  kind            MaterialKind
+  supplier        String
+  thicknessMm     Int          @default(20)
+  finish          String
+  costPerSqmCents Int
+
+  slabs   Slab[]
+  offcuts Offcut[]
+  lines   OrderLine[]
+
+  @@index([kind])
+}
+
+model Slab {
+  id         String     @id @default(cuid())
+  ref        String     @unique // e.g. SLB-0142
+  materialId String
+  widthMm    Int
+  lengthMm   Int
+  status     SlabStatus @default(IN_STOCK)
+  rack       String
+  costCents  Int // what we paid for this slab
+  arrivedAt  DateTime
+  photoUrl   String?
+
+  material  Material        @relation(fields: [materialId], references: [id])
+  offcuts   Offcut[]
+  movements StockMovement[]
+  lines     OrderLine[]
+
+  @@index([status])
+  @@index([materialId])
+}
+
+/// An offcut is a first-class tracked item, not a note on a slab. This is the
+/// business's specialty, and `listedPublicly` is what the public offcuts page
+/// reads from once it stops being hand-edited cards.
+model Offcut {
+  id             String       @id @default(cuid())
+  ref            String       @unique // e.g. OFF-0231
+  parentSlabId   String?
+  materialId     String
+  widthMm        Int
+  lengthMm       Int
+  thicknessMm    Int          @default(20)
+  finish         String
+  status         OffcutStatus @default(AVAILABLE)
+  rack           String
+  listedPublicly Boolean      @default(false)
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  parentSlab Slab?           @relation(fields: [parentSlabId], references: [id])
+  material   Material        @relation(fields: [materialId], references: [id])
+  movements  StockMovement[]
+  lines      OrderLine[]
+
+  @@index([status])
+  @@index([listedPublicly])
+  @@index([materialId])
+}
+
+model Consumable {
+  id            String @id @default(cuid())
+  name          String @unique
+  unit          String // tube, blade, litre
+  qtyOnHand     Int
+  reorderPoint  Int
+  unitCostCents Int
+
+  movements StockMovement[]
+}
+
+enum MovementKind {
+  RECEIVED
+  RESERVED
+  RELEASED
+  CONSUMED
+  ADJUSTED
+  WASTED
+}
+
+/// Append-only audit trail. Every change to stock writes one of these with who
+/// did it and when, so "where did that slab go" always has an answer.
+model StockMovement {
+  id           String       @id @default(cuid())
+  kind         MovementKind
+  slabId       String?
+  offcutId     String?
+  consumableId String?
+  qty          Int          @default(1)
+  userId       String
+  orderId      String?
+  note         String?
+  createdAt    DateTime     @default(now())
+
+  slab       Slab?       @relation(fields: [slabId], references: [id])
+  offcut     Offcut?     @relation(fields: [offcutId], references: [id])
+  consumable Consumable? @relation(fields: [consumableId], references: [id])
+  user       User        @relation(fields: [userId], references: [id])
+  order      Order?      @relation(fields: [orderId], references: [id])
+
+  @@index([createdAt])
+  @@index([kind])
+}
+
+// ---------------------------------------------------------------- orders
+
+enum CustomerSource {
+  WEBSITE
+  OFFCUTS_PAGE
+  PHONE
+  REFERRAL
+  REPEAT
+  WALK_IN
+}
+
+model Customer {
+  id        String         @id @default(cuid())
+  name      String
+  phone     String
+  email     String?
+  suburb    String
+  source    CustomerSource
+  createdAt DateTime       @default(now())
+
+  orders Order[]
+
+  @@index([source])
+}
+
+enum Pipeline {
+  SHORT // offcut projects and small jobs
+  FULL  // benchtop installs needing a template visit
+}
+
+enum JobType {
+  OFFCUT_PROJECT
+  VANITY_TOP
+  SMALL_BENCHTOP
+  REPAIR
+  CUTOUT
+  TOP_REMOVAL
+  FULL_BENCHTOP
+  SPLASHBACK
+}
+
+/// One enum for both pipelines. lib/pipeline.ts owns which stages are legal in
+/// which pipeline and maps them onto a coarse phase the financials group by.
+enum OrderStatus {
+  ENQUIRY
+  QUOTED
+  WON
+  CUTTING     // SHORT only
+  TEMPLATED   // FULL only
+  FABRICATING // FULL only
+  SCHEDULED   // FULL only
+  INSTALLED   // FULL only
+  COMPLETE
+  LOST
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  jobNumber     String      @unique // e.g. HP-2609-041
+  customerId    String
+  pipeline      Pipeline
+  jobType       JobType
+  status        OrderStatus @default(ENQUIRY)
+  address       String
+  suburb        String
+  notes         String?
+
+  // Money. Admin-only — lib/queries never selects these for an employee.
+  quoteCents   Int @default(0)
+  depositCents Int @default(0)
+
+  estimatedHours Float @default(0)
+  actualHours    Float @default(0)
+
+  createdAt   DateTime  @default(now())
+  wonAt       DateTime?
+  completedAt DateTime?
+  lostReason  String?
+
+  customer  Customer        @relation(fields: [customerId], references: [id])
+  lines     OrderLine[]
+  events    ScheduleEvent[]
+  movements StockMovement[]
+
+  @@index([status])
+  @@index([pipeline])
+  @@index([createdAt])
+  @@index([completedAt])
+}
+
+model OrderLine {
+  id          String @id @default(cuid())
+  orderId     String
+  description String
+
+  materialId String?
+  slabId     String?
+  offcutId   String?
+
+  sqm            Float @default(0)
+  labourHours    Float @default(0)
+  unitPriceCents Int   @default(0)
+  lineTotalCents Int   @default(0)
+
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  material Material? @relation(fields: [materialId], references: [id])
+  slab     Slab?     @relation(fields: [slabId], references: [id])
+  offcut   Offcut?   @relation(fields: [offcutId], references: [id])
+
+  @@index([orderId])
+}
+
+// ---------------------------------------------------------------- scheduling
+
+enum EventKind {
+  TEMPLATE
+  FABRICATE
+  INSTALL
+  REPAIR
+  DELIVERY
+}
+
+model ScheduleEvent {
+  id            String    @id @default(cuid())
+  orderId       String?
+  kind          EventKind
+  startAt       DateTime
+  endAt         DateTime
+  address       String
+  notes         String?
+  googleEventId String?   @unique
+  createdAt     DateTime  @default(now())
+
+  order     Order?             @relation(fields: [orderId], references: [id])
+  assignees ScheduleAssignee[]
+
+  @@index([startAt])
+  @@index([kind])
+}
+
+model ScheduleAssignee {
+  eventId String
+  userId  String
+
+  event ScheduleEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+  @@index([userId])
+}

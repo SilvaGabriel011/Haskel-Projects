@@ -6,10 +6,28 @@ Site estatico. Uma pagina, sem build, sem dependencia.
 
 ```
 haskel-site/
-├── index.html      site inteiro (HTML + CSS + JS)
+├── index.html      pagina inicial
+├── offcuts.html    pagina de offcuts (o que esta no rack essa semana)
+├── styles.css      CSS compartilhado pelas duas paginas
 ├── images/         suas fotos (ver images/LEIA-ME.txt)
 └── README.md
 ```
+
+O CSS ficava dentro do `index.html`. Agora esta no `styles.css`, que as duas
+paginas usam. Mexeu no visual? Mexe so no `styles.css` e vale pras duas.
+
+## Estoque de offcuts
+
+O `offcuts.html` esta com **seis cards de exemplo**. Antes de divulgar a pagina,
+troque por pecas reais: material, medida, espessura, acabamento e situacao.
+
+A situacao é a `<span class="oc-status ...">`:
+
+- `in` — Available (rosa)
+- `low` — Last one (laranja)
+- `out` — Reserved (cinza)
+
+Pode ter quantos cards quiser, a grade se ajusta sozinha.
 
 ## Deploy na Vercel
 

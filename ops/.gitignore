@@ -1,0 +1,11 @@
+node_modules
+.next
+out
+build
+next-env.d.ts
+*.tsbuildinfo
+
+# Never commit real secrets or demo passwords
+.env
+.env.local
+.env*.local
