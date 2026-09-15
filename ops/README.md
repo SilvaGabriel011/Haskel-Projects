@@ -11,16 +11,24 @@ The two deploy independently and neither can break the other.
 | Phase | What | Status |
 |---|---|---|
 | 0 | Architecture drawing (`../docs/`) | Done |
-| 1 | Sign-in, roles, app shell | **Done — you are here** |
-| 2 | Database schema and demo data | Next |
-| 3 | Stock (slabs, offcuts, consumables) | |
-| 4 | Orders (two pipelines) | |
-| 5 | Scheduling + Google Calendar | |
-| 6 | Financial dashboards | |
+| 1 | Sign-in, roles, app shell | Done |
+| 2 | Database schema and demo data | Done |
+| 3 | Stock (slabs, offcuts, consumables) | Done |
+| 4 | Orders (two pipelines) | Done |
+| 5 | Scheduling | **Week view done; Google sync pending credentials** |
+| 6 | Financial dashboards | Next |
 | 7 | Hardening and handover | |
 
-Every page from Stock onwards is currently a shell that says which phase fills
-it in. Sign-in, the role split and navigation are real and working now.
+Stock, offcuts, orders and the schedule run on real (seeded) data. Financials
+and settings are still shells.
+
+**Google Calendar sync is deliberately not implemented yet.** The half that can
+be tested without Google — turning a booking into a calendar event, with the
+right timezone and the site notes an installer needs — is written and unit
+tested in `lib/google-calendar.ts`. The network call is not, because writing an
+untested API call would look finished without being so. Until credentials
+exist, sync returns `not-configured` and scheduling works regardless: the
+booking is the record, the calendar is only a copy of it.
 
 ## Running it
 
@@ -59,11 +67,14 @@ control:
 
 1. `proxy.ts` — blocks the route before any page renders
 2. `lib/guard.ts` — every protected page asserts its own role server-side
-3. From phase 2, the query layer strips price fields before they are serialised
+3. `lib/queries/` never selects money columns for an employee — they are not
+   read from the database, so there is nothing to strip and nothing to find
 
 An employee who types `/financials` lands back on the dashboard with a note
 saying why. Verified: signed-out hits on all seven routes go to `/login`; an
-employee gets `/dashboard?denied=/financials`; an admin gets the page.
+employee gets `/dashboard?denied=/financials`; an admin gets the page. The same
+holds on the schedule — passing someone else's id in the query string does not
+widen what an employee sees.
 
 ## Signing in
 
@@ -127,8 +138,10 @@ ops/
 ├── lib/
 │   ├── roles.ts       roles, sections and who may open what — single source of truth
 │   ├── guard.ts       server-side assertions used by every protected page
-│   ├── staff.ts       the staff list (moves to the database in phase 2)
-│   └── password.ts    scrypt hashing for demo accounts
+│   ├── staff.ts       staff lookups, backed by the User table
+│   ├── pipeline.ts    the two pipelines, legal transitions, shared phase mapping
+│   ├── queries/       role-aware reads — the money never leaves the server
+│   └── google-calendar.ts  booking → calendar event (sync pending credentials)
 ├── app/
 │   ├── login/         sign-in
 │   └── (app)/         the back office, behind the guard
