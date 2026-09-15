@@ -57,3 +57,38 @@ describe("seed integrity", () => {
     assert.ok(listed > 0, "the public offcuts page needs something to show");
   });
 });
+
+describe("pricing makes sense", () => {
+  it("no completed job is quoted below the cost of its own stone", async () => {
+    const jobs = await db.order.findMany({
+      where: { status: "COMPLETE" },
+      select: {
+        jobNumber: true, quoteCents: true,
+        lines: { select: { sqm: true, offcutId: true, material: { select: { costPerSqmCents: true } } } },
+      },
+    });
+    const underwater = jobs.filter((j) => {
+      const stone = j.lines.reduce(
+        (t, l) => t + (l.offcutId ? 0 : Math.round(l.sqm * (l.material?.costPerSqmCents ?? 0))),
+        0,
+      );
+      return j.quoteCents < stone;
+    });
+    assert.deepEqual(underwater.map((j) => j.jobNumber), [],
+      "jobs quoted below the cost of their own material");
+  });
+
+  it("the business as a whole makes money", async () => {
+    const { summary } = await import("../lib/queries/financials");
+    const s = await summary();
+    assert.ok(s.margin > 0, `overall margin is ${s.marginPct}%`);
+    assert.ok(s.marginPct > 15, `margin of ${s.marginPct}% does not look like a going concern`);
+  });
+
+  it("offcut work earns a better margin than slab work — the whole pitch", async () => {
+    const { offcutComparison } = await import("../lib/queries/financials");
+    const { offcut, other } = await offcutComparison();
+    assert.ok(offcut.marginPct > other.marginPct,
+      `offcut ${offcut.marginPct}% should beat slab ${other.marginPct}%`);
+  });
+});

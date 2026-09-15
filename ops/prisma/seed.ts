@@ -83,6 +83,9 @@ const FULL_JOBS: readonly JobType[] = ["FULL_BENCHTOP", "FULL_BENCHTOP", "SMALL_
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const db = new PrismaClient({ adapter });
 
+/** Must match LABOUR_RATE_CENTS in lib/money.ts, or margins will not reconcile. */
+const LABOUR_RATE = 9500;
+
 const MONTHS_BACK = 12;
 const NOW = new Date("2026-09-15T00:00:00Z");
 const daysAgo = (d: number) => new Date(NOW.getTime() - d * 86_400_000);
@@ -218,9 +221,26 @@ async function main() {
               : pipeline === "SHORT" ? Number((0.6 + rnd() * 2.2).toFixed(2))
               : Number((3.5 + rnd() * 6).toFixed(2));
     const hours = Number((isOffcutJob ? 2 + rnd() * 3 : pipeline === "SHORT" ? 3 + rnd() * 5 : 9 + rnd() * 12).toFixed(1));
-    // Offcut work is cheaper per m2 — that is the whole pitch.
-    const rate = isOffcutJob ? int(19000, 27000) : int(34000, 52000);
-    const quoteCents = Math.round(sqm * rate + hours * 9500 + int(4000, 18000));
+
+    // Pick the stone BEFORE pricing: a quote is a markup on the material that
+    // is actually going into the job, not an independent number. Getting this
+    // backwards priced jobs below the cost of their own stone.
+    const usedOffcut = isOffcutJob && availableOffcuts.length ? pick(availableOffcuts) : null;
+    const material = usedOffcut ? materials.find((m) => m.id === usedOffcut.materialId)! : pick(materials);
+    const usedSlab = usedOffcut
+      ? null
+      : (() => {
+          const ofMaterial = slabs.filter((sl) => sl.materialId === material.id);
+          return ofMaterial.length ? pick(ofMaterial) : pick(slabs);
+        })();
+
+    // Offcut work is sold at a fraction of fresh-slab rate — that is the pitch —
+    // and carries no material cost, because the slab was paid for by the job
+    // that cut it. Slab work is marked up on what the stone actually cost.
+    const rate = Math.round(
+      material.costPerSqmCents * (isOffcutJob ? 0.55 + rnd() * 0.25 : 1.9 + rnd() * 0.8),
+    );
+    const quoteCents = Math.round(sqm * rate + hours * LABOUR_RATE + int(4000, 18000));
     const won = ["WON","CUTTING","TEMPLATED","FABRICATING","SCHEDULED","INSTALLED","COMPLETE"].includes(status);
     const done = status === "COMPLETE";
 
@@ -243,16 +263,8 @@ async function main() {
     });
     orders.push(order);
 
-    // One line, referencing real stock. Offcut jobs consume an offcut; everything
-    // else consumes a slab — either way the movement log names a real item.
-    const usedOffcut = isOffcutJob && availableOffcuts.length ? pick(availableOffcuts) : null;
-    const material = usedOffcut ? materials.find((m) => m.id === usedOffcut.materialId)! : pick(materials);
-    const usedSlab = usedOffcut
-      ? null
-      : (() => {
-          const ofMaterial = slabs.filter((sl) => sl.materialId === material.id);
-          return ofMaterial.length ? pick(ofMaterial) : pick(slabs);
-        })();
+    // One line, referencing the stock chosen above, so the movement log and the
+    // margin both point at the same physical piece.
     await db.orderLine.create({
       data: {
         orderId: order.id,
