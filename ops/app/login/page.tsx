@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { auth, signIn } from "@/auth";
+import { DemoBanner } from "@/components/demo-banner";
 import { demoModeEnabled, listStaff, workspaceDomain, type Staff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -19,7 +20,9 @@ export default async function LoginPage({
   const domain = workspaceDomain();
 
   return (
-    <main className="min-h-dvh grid lg:grid-cols-[1.1fr_1fr]">
+    <>
+      <DemoBanner />
+      <main className="min-h-dvh grid lg:grid-cols-[1.1fr_1fr]">
       {/* Left: the brand side. Hidden on phones, where it is just noise. */}
       <div className="hidden lg:flex flex-col justify-between bg-ink text-white p-12">
         <div className="flex items-center gap-3">
@@ -90,7 +93,8 @@ export default async function LoginPage({
           {demo ? <DemoSignIn staff={await listStaff()} /> : null}
         </div>
       </div>
-    </main>
+      </main>
+    </>
   );
 }
 

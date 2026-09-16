@@ -15,12 +15,31 @@ The two deploy independently and neither can break the other.
 | 2 | Database schema and demo data | Done |
 | 3 | Stock (slabs, offcuts, consumables) | Done |
 | 4 | Orders (two pipelines) | Done |
-| 5 | Scheduling | **Week view done; Google sync pending credentials** |
-| 6 | Financial dashboards | Next |
-| 7 | Hardening and handover | |
+| 5 | Scheduling | Week view done; **Google sync still pending your credentials** |
+| 6 | Financial dashboards | Done |
+| 7 | Hardening and handover | Done |
+| — | Settings (people and access) | Done |
+| 8a | Booking requests from the website | Done |
+| 8b | Calendar sync on accept | **Wired, waiting on credentials** |
 
-Stock, offcuts, orders and the schedule run on real (seeded) data. Financials
-and settings are still shells.
+Every screen now runs on real (seeded) data. No shells left.
+
+## The one public route
+
+`/book` and `POST /api/book` are the **only** paths a stranger can reach — a
+customer asks for a time, and it lands as a `BookingRequest`. Nothing else:
+no Customer, no Order, no diary entry. Only an admin accepting it creates
+those, so a form submission can never put anything in the day.
+
+Everything else stays behind sign-in. `tests/booking.test.ts` asserts the guard
+excludes exactly those two paths and nothing that holds data, so widening it by
+accident fails a test.
+
+It is an unauthenticated write, so it is defended accordingly: honeypot field,
+five requests per IP per hour, every field length-capped, times restricted to
+the next year, and a job-type list narrower than the internal enum. The rate
+limit is per serverless instance, which slows a casual flood rather than
+stopping a determined one — if real spam turns up, put Turnstile in front.
 
 **Google Calendar sync is deliberately not implemented yet.** The half that can
 be tested without Google — turning a booking into a calendar event, with the
@@ -48,8 +67,24 @@ npm run dev           # http://localhost:3000
 ```bash
 npm run typecheck     # tsc, no emit
 npm run lint
+npm test              # 61 unit tests — query layer, pipeline rules, seed integrity
 npm run build         # full production build
 ```
+
+**End-to-end role separation** needs a seeded database and the app running,
+and takes the demo passwords from the environment so none are hardcoded:
+
+```bash
+npm run dev &                                   # or point E2E_BASE_URL elsewhere
+E2E_ADMIN_PASSWORD=... E2E_INSTALLER_PASSWORD=... npm run test:e2e
+```
+
+21 tests: every route's landing place signed out and per role, the absence of
+any dollar amount on employee pages, and that adding `?who=` to the schedule
+does not widen what an employee sees.
+
+`@playwright/test` is pinned to **1.56.1** to match the preinstalled browsers.
+Bumping it without matching browsers fails with "Executable doesn't exist".
 
 ## Who can see what
 
@@ -82,10 +117,11 @@ widen what an employee sees.
 account must be on the company Workspace domain, and the email must be on the
 staff list in `lib/staff.ts`. A valid Google account alone is not enough.
 
-**Demo mode** (`DEMO_MODE=true`) adds password sign-in for the three seeded
-accounts so the system can be explored before Google is set up. Setting
-`DEMO_MODE` to anything else removes that provider entirely — there is no
-password path left to attack.
+**Demo mode** adds password sign-in for the three seeded accounts so the system
+can be explored before Google is set up. It ships **off**; only the exact string
+`DEMO_MODE=true` enables it. Anything else — including absent, `"1"` and
+`"TRUE"` — removes the provider entirely, so there is no password path left to
+attack.
 
 Passwords are hashed with scrypt from the Node standard library. No dependency,
 nothing to compile. Hashes go in `.env.local`, which is gitignored; plain
@@ -94,6 +130,21 @@ passwords are never written to disk.
 > The hash format uses `:` separators, not `$`. A `$` inside a `.env` value is
 > read as a variable reference and silently expanded away — locally and in
 > Vercel's environment variables alike.
+
+## Before this goes live — read this
+
+Two switches decide who can get in. Both now fail CLOSED, and both shout while
+they are wrong, but they are still yours to set.
+
+| Variable | Until you set it |
+|---|---|
+| `GOOGLE_WORKSPACE_DOMAIN` | **Google sign-in is refused outright in production.** Sign-in cannot be limited to your company without it, so it refuses rather than letting anyone through. Local development is unaffected. |
+| `DEMO_MODE` | Ships as `false`. While it is `true`, anyone with a demo password can sign in, and every page carries a banner saying so. |
+
+These used to fail open — an unset domain meant the check was skipped, and
+`.env.example` shipped `DEMO_MODE=true`, so copying it handed a deployment a
+working password login. Both are now the other way round, and
+`tests/fail-closed.test.ts` keeps them that way.
 
 ## Two things only you can do
 
@@ -107,7 +158,7 @@ This is a second, separate project in the same repository.
 2. **Root Directory: `ops`** — this is the important one
 3. Framework preset: Next.js (detected automatically)
 4. Add the environment variables from `.env.example`
-5. Deploy, then Settings → Domains → add `ops.<your-domain>`
+5. Deploy, then Settings → Domains → add `ops.haskelprojects.com.au`
 
 The existing `haskel-projects` project is untouched and keeps serving the
 public site from `haskel-site/`.
@@ -121,12 +172,18 @@ public site from `haskel-site/`.
 4. Credentials → Create → OAuth client ID → Web application
 5. Authorised redirect URIs:
    - `http://localhost:3000/api/auth/callback/google`
-   - `https://ops.<your-domain>/api/auth/callback/google`
+   - `https://ops.haskelprojects.com.au/api/auth/callback/google`
 6. Copy the client ID and secret into `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`
-7. Set `GOOGLE_WORKSPACE_DOMAIN` to your domain, e.g. `haskelprojects.com.au`
+7. `GOOGLE_WORKSPACE_DOMAIN` is already set to `haskelprojects.com.au`
 
-Until `GOOGLE_WORKSPACE_DOMAIN` is set, the domain check is skipped and only the
-staff list applies. Set it before this goes anywhere near real data.
+**In production, Google sign-in is refused until `GOOGLE_WORKSPACE_DOMAIN` is
+set.** Not "restricted to the staff list" — refused. Without it there is no way
+to limit sign-in to your company, so it declines rather than guessing. Local
+development runs without it so you are not blocked while setting this up.
+
+(This used to be the opposite: an unset value meant the check was skipped.
+`lib/access-config.ts:googleSignInBlockedReason` is the behaviour now, and
+`tests/fail-closed.test.ts` keeps it that way.)
 
 ## Layout
 
@@ -137,6 +194,7 @@ ops/
 ├── proxy.ts           route guard (Next 16's replacement for middleware.ts)
 ├── lib/
 │   ├── roles.ts       roles, sections and who may open what — single source of truth
+│   ├── access-config.ts  who may sign in at all — env reads, kept testable
 │   ├── guard.ts       server-side assertions used by every protected page
 │   ├── staff.ts       staff lookups, backed by the User table
 │   ├── pipeline.ts    the two pipelines, legal transitions, shared phase mapping

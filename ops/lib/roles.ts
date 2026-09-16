@@ -29,6 +29,7 @@ export const SECTIONS: readonly Section[] = [
   { href: "/dashboard", label: "Dashboard", blurb: "What is on today", allow: ["ADMIN", "EMPLOYEE"] },
   { href: "/stock", label: "Stock", blurb: "Slabs, offcuts and consumables", allow: ["ADMIN", "EMPLOYEE"] },
   { href: "/offcuts", label: "Offcuts", blurb: "What is on the rack", allow: ["ADMIN", "EMPLOYEE"] },
+  { href: "/bookings", label: "Bookings", blurb: "Requests from the website", allow: ["ADMIN"] },
   { href: "/orders", label: "Orders", blurb: "Jobs from enquiry to complete", allow: ["ADMIN", "EMPLOYEE"] },
   { href: "/schedule", label: "Schedule", blurb: "Installs, templates and repairs", allow: ["ADMIN", "EMPLOYEE"] },
   { href: "/financials", label: "Financials", blurb: "Revenue, margin and stock value", allow: ["ADMIN"] },

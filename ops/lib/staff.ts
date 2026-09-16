@@ -39,25 +39,12 @@ export async function listStaff(): Promise<Staff[]> {
   });
 }
 
-/** True when demo password sign-in is switched on. */
-export function demoModeEnabled(): boolean {
-  return process.env.DEMO_MODE === "true";
-}
-
-/**
- * The Workspace domain sign-in is pinned to. When set, a Google account from
- * any other domain is refused even if it is on the staff list.
- */
-export function workspaceDomain(): string | null {
-  const d = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim();
-  return d ? d.toLowerCase() : null;
-}
-
-/**
- * Which env var holds a given account's demo password hash. Demo mode only —
- * derived from the local part of the email so the mapping needs no table.
- */
-export function demoPasswordEnvFor(email: string): string | null {
-  const local = email.split("@")[0]?.toUpperCase().replace(/[^A-Z0-9]/g, "_");
-  return local ? `DEMO_${local}_PASSWORD_HASH` : null;
-}
+// Access configuration lives in lib/access-config.ts so it stays testable —
+// this module is server-only because it touches the database.
+export {
+  demoModeEnabled,
+  demoPasswordEnvFor,
+  emailOnDomain,
+  googleSignInBlockedReason,
+  workspaceDomain,
+} from "./access-config";
