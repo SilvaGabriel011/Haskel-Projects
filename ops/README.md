@@ -48,8 +48,24 @@ npm run dev           # http://localhost:3000
 ```bash
 npm run typecheck     # tsc, no emit
 npm run lint
+npm test              # 61 unit tests — query layer, pipeline rules, seed integrity
 npm run build         # full production build
 ```
+
+**End-to-end role separation** needs a seeded database and the app running,
+and takes the demo passwords from the environment so none are hardcoded:
+
+```bash
+npm run dev &                                   # or point E2E_BASE_URL elsewhere
+E2E_ADMIN_PASSWORD=... E2E_INSTALLER_PASSWORD=... npm run test:e2e
+```
+
+21 tests: every route's landing place signed out and per role, the absence of
+any dollar amount on employee pages, and that adding `?who=` to the schedule
+does not widen what an employee sees.
+
+`@playwright/test` is pinned to **1.56.1** to match the preinstalled browsers.
+Bumping it without matching browsers fails with "Executable doesn't exist".
 
 ## Who can see what
 
@@ -82,10 +98,11 @@ widen what an employee sees.
 account must be on the company Workspace domain, and the email must be on the
 staff list in `lib/staff.ts`. A valid Google account alone is not enough.
 
-**Demo mode** (`DEMO_MODE=true`) adds password sign-in for the three seeded
-accounts so the system can be explored before Google is set up. Setting
-`DEMO_MODE` to anything else removes that provider entirely — there is no
-password path left to attack.
+**Demo mode** adds password sign-in for the three seeded accounts so the system
+can be explored before Google is set up. It ships **off**; only the exact string
+`DEMO_MODE=true` enables it. Anything else — including absent, `"1"` and
+`"TRUE"` — removes the provider entirely, so there is no password path left to
+attack.
 
 Passwords are hashed with scrypt from the Node standard library. No dependency,
 nothing to compile. Hashes go in `.env.local`, which is gitignored; plain
@@ -140,8 +157,14 @@ public site from `haskel-site/`.
 6. Copy the client ID and secret into `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`
 7. Set `GOOGLE_WORKSPACE_DOMAIN` to your domain, e.g. `haskelprojects.com.au`
 
-Until `GOOGLE_WORKSPACE_DOMAIN` is set, the domain check is skipped and only the
-staff list applies. Set it before this goes anywhere near real data.
+**In production, Google sign-in is refused until `GOOGLE_WORKSPACE_DOMAIN` is
+set.** Not "restricted to the staff list" — refused. Without it there is no way
+to limit sign-in to your company, so it declines rather than guessing. Local
+development runs without it so you are not blocked while setting this up.
+
+(This used to be the opposite: an unset value meant the check was skipped.
+`lib/access-config.ts:googleSignInBlockedReason` is the behaviour now, and
+`tests/fail-closed.test.ts` keeps it that way.)
 
 ## Layout
 
@@ -152,6 +175,7 @@ ops/
 ├── proxy.ts           route guard (Next 16's replacement for middleware.ts)
 ├── lib/
 │   ├── roles.ts       roles, sections and who may open what — single source of truth
+│   ├── access-config.ts  who may sign in at all — env reads, kept testable
 │   ├── guard.ts       server-side assertions used by every protected page
 │   ├── staff.ts       staff lookups, backed by the User table
 │   ├── pipeline.ts    the two pipelines, legal transitions, shared phase mapping
