@@ -18,9 +18,9 @@ The two deploy independently and neither can break the other.
 | 5 | Scheduling | Week view done; **Google sync still pending your credentials** |
 | 6 | Financial dashboards | Done |
 | 7 | Hardening and handover | Done |
+| — | Settings (people and access) | Done |
 
-Stock, offcuts, orders, the schedule and the financials all run on real
-(seeded) data. Settings is the last shell.
+Every screen now runs on real (seeded) data. No shells left.
 
 **Google Calendar sync is deliberately not implemented yet.** The half that can
 be tested without Google — turning a booking into a calendar event, with the
