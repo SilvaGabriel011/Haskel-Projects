@@ -47,9 +47,31 @@ describe("seed integrity", () => {
     assert.equal(premature, 0);
   });
 
-  it("every order has at least one line", async () => {
-    const without = await db.order.count({ where: { lines: { none: {} } } });
-    assert.equal(without, 0);
+  it("every order past QUOTED has at least one line", async () => {
+    // Not every order: one created from a website booking sits at ENQUIRY with
+    // nothing on it, because it has not been quoted yet. But once a job is won
+    // it must have lines — revenueByMaterial attributes a job's revenue through
+    // lines[0].material, so a won job with none would silently vanish from the
+    // financials rather than show as zero.
+    const without = await db.order.count({
+      where: {
+        lines: { none: {} },
+        status: { in: ["WON", "CUTTING", "TEMPLATED", "FABRICATING", "SCHEDULED", "INSTALLED", "COMPLETE"] },
+      },
+    });
+    assert.equal(without, 0, "a won job with no lines would drop out of the revenue chart");
+  });
+
+  it("no completed job is missing from the revenue attribution", async () => {
+    const { revenueByMaterial } = await import("../lib/queries/financials");
+    const [attributed, completed] = await Promise.all([
+      revenueByMaterial().then((rows) => rows.reduce((t, r) => t + r.cents, 0)),
+      db.order.aggregate({ where: { status: "COMPLETE" }, _sum: { quoteCents: true } }),
+    ]);
+    // Top 8 materials only, so attributed <= total; but it must not be far off,
+    // which would mean jobs are falling through the attribution entirely.
+    const total = completed._sum.quoteCents ?? 0;
+    assert.ok(attributed > total * 0.8, `only ${attributed} of ${total} attributed to a material`);
   });
 
   it("some offcuts are flagged for the public website", async () => {

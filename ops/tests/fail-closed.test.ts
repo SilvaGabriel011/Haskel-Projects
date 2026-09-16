@@ -80,3 +80,42 @@ describe("the file people copy", () => {
       ".env.example must not default DEMO_MODE to true");
   });
 });
+
+describe("which emails belong to the domain", () => {
+  const DOMAIN = "haskelprojects.com.au";
+
+  it("admits a real company address", async () => {
+    const { emailOnDomain } = await freshStaff();
+    assert.equal(emailOnDomain("gabriel@haskelprojects.com.au", DOMAIN), true);
+  });
+
+  it("refuses another domain", async () => {
+    const { emailOnDomain } = await freshStaff();
+    assert.equal(emailOnDomain("someone@gmail.com", DOMAIN), false);
+  });
+
+  it("refuses a lookalike domain", async () => {
+    const { emailOnDomain } = await freshStaff();
+    // The case a bare endsWith(domain) would wave through.
+    assert.equal(emailOnDomain("x@evilhaskelprojects.com.au", DOMAIN), false);
+    assert.equal(emailOnDomain("x@haskelprojects.com.au.evil.com", DOMAIN), false);
+  });
+
+  it("refuses a subdomain — it is not the domain", async () => {
+    const { emailOnDomain } = await freshStaff();
+    assert.equal(emailOnDomain("x@mail.haskelprojects.com.au", DOMAIN), false);
+  });
+
+  it("is case-insensitive on both sides", async () => {
+    const { emailOnDomain } = await freshStaff();
+    assert.equal(emailOnDomain("Gabriel@HaskelProjects.COM.AU", DOMAIN), true);
+    assert.equal(emailOnDomain("gabriel@haskelprojects.com.au", "HASKELPROJECTS.COM.AU"), true);
+  });
+
+  it("refuses malformed addresses rather than guessing", async () => {
+    const { emailOnDomain } = await freshStaff();
+    for (const bad of ["", "nobody", "@haskelprojects.com.au", "x@", "a@b@haskelprojects.com.au"]) {
+      assert.equal(emailOnDomain(bad, DOMAIN), false, `${JSON.stringify(bad)} should be refused`);
+    }
+  });
+});

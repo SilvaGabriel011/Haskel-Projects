@@ -17,6 +17,7 @@ import { verifyPassword } from "@/lib/password";
 import {
   demoModeEnabled,
   demoPasswordEnvFor,
+  emailOnDomain,
   findStaffByEmail,
   googleSignInBlockedReason,
   workspaceDomain,
@@ -73,7 +74,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!email) return false;
 
       const domain = workspaceDomain();
-      if (domain && !email.endsWith(`@${domain}`)) return false;
+      if (domain && !emailOnDomain(email, domain)) return false;
 
       return (await findStaffByEmail(email)) !== null;
     },

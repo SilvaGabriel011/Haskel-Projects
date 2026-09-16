@@ -39,6 +39,21 @@ export function googleSignInBlockedReason(): string | null {
 }
 
 /**
+ * Is this email on this domain?
+ *
+ * Compares the domain part exactly rather than asking whether the address ends
+ * with the domain. `endsWith` happens to reject the lookalike
+ * `x@evilhaskelprojects.com.au` only because the "@" is part of the needle —
+ * that is luck holding it up, not intent. A subdomain is also not the domain.
+ */
+export function emailOnDomain(email: string, domain: string): boolean {
+  const at = email.lastIndexOf("@");
+  if (at <= 0 || at === email.length - 1) return false;
+  if (email.indexOf("@") !== at) return false; // a second "@" is not an address
+  return email.slice(at + 1).toLowerCase() === domain.trim().toLowerCase();
+}
+
+/**
  * Which env var holds a given account's demo password hash. Demo mode only —
  * derived from the local part of the email so the mapping needs no table.
  */

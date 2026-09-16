@@ -17,8 +17,8 @@ const INSTALLER = {
   password: process.env.E2E_INSTALLER_PASSWORD ?? "",
 };
 
-const APP_ROUTES = ["/dashboard", "/stock", "/offcuts", "/orders", "/schedule", "/financials", "/settings"];
-const ADMIN_ONLY = ["/financials", "/settings"];
+const APP_ROUTES = ["/dashboard", "/stock", "/offcuts", "/orders", "/schedule", "/bookings", "/financials", "/settings"];
+const ADMIN_ONLY = ["/bookings", "/financials", "/settings"];
 
 async function signIn(page: Page, who: { email: string; password: string }) {
   expect(who.password, "set E2E_ADMIN_PASSWORD and E2E_INSTALLER_PASSWORD").not.toBe("");
@@ -35,6 +35,19 @@ async function signIn(page: Page, who: { email: string; password: string }) {
 async function showsMoney(page: Page) {
   return page.evaluate(() => /\$[\d,]+/.test(document.body.innerText));
 }
+
+test.describe("the public booking page", () => {
+  test("opens without signing in — it is the one page customers are meant to reach", async ({ page }) => {
+    await page.goto("/book");
+    await expect(page).toHaveURL(/\/book$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  });
+
+  test("says plainly that nothing is booked yet", async ({ page }) => {
+    await page.goto("/book");
+    await expect(page.getByText(/not a booking/i)).toBeVisible();
+  });
+});
 
 test.describe("signed out", () => {
   for (const route of APP_ROUTES) {

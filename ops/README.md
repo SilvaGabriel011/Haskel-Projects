@@ -19,8 +19,27 @@ The two deploy independently and neither can break the other.
 | 6 | Financial dashboards | Done |
 | 7 | Hardening and handover | Done |
 | — | Settings (people and access) | Done |
+| 8a | Booking requests from the website | Done |
+| 8b | Calendar sync on accept | **Wired, waiting on credentials** |
 
 Every screen now runs on real (seeded) data. No shells left.
+
+## The one public route
+
+`/book` and `POST /api/book` are the **only** paths a stranger can reach — a
+customer asks for a time, and it lands as a `BookingRequest`. Nothing else:
+no Customer, no Order, no diary entry. Only an admin accepting it creates
+those, so a form submission can never put anything in the day.
+
+Everything else stays behind sign-in. `tests/booking.test.ts` asserts the guard
+excludes exactly those two paths and nothing that holds data, so widening it by
+accident fails a test.
+
+It is an unauthenticated write, so it is defended accordingly: honeypot field,
+five requests per IP per hour, every field length-capped, times restricted to
+the next year, and a job-type list narrower than the internal enum. The rate
+limit is per serverless instance, which slows a casual flood rather than
+stopping a determined one — if real spam turns up, put Turnstile in front.
 
 **Google Calendar sync is deliberately not implemented yet.** The half that can
 be tested without Google — turning a booking into a calendar event, with the
@@ -139,7 +158,7 @@ This is a second, separate project in the same repository.
 2. **Root Directory: `ops`** — this is the important one
 3. Framework preset: Next.js (detected automatically)
 4. Add the environment variables from `.env.example`
-5. Deploy, then Settings → Domains → add `ops.<your-domain>`
+5. Deploy, then Settings → Domains → add `ops.haskelprojects.com.au`
 
 The existing `haskel-projects` project is untouched and keeps serving the
 public site from `haskel-site/`.
@@ -153,9 +172,9 @@ public site from `haskel-site/`.
 4. Credentials → Create → OAuth client ID → Web application
 5. Authorised redirect URIs:
    - `http://localhost:3000/api/auth/callback/google`
-   - `https://ops.<your-domain>/api/auth/callback/google`
+   - `https://ops.haskelprojects.com.au/api/auth/callback/google`
 6. Copy the client ID and secret into `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`
-7. Set `GOOGLE_WORKSPACE_DOMAIN` to your domain, e.g. `haskelprojects.com.au`
+7. `GOOGLE_WORKSPACE_DOMAIN` is already set to `haskelprojects.com.au`
 
 **In production, Google sign-in is refused until `GOOGLE_WORKSPACE_DOMAIN` is
 set.** Not "restricted to the staff list" — refused. Without it there is no way

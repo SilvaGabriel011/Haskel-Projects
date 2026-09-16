@@ -248,6 +248,7 @@ model Order {
   lostReason  String?
 
   customer  Customer        @relation(fields: [customerId], references: [id])
+  booking   BookingRequest?
   lines     OrderLine[]
   events    ScheduleEvent[]
   movements StockMovement[]
@@ -278,6 +279,49 @@ model OrderLine {
   offcut   Offcut?   @relation(fields: [offcutId], references: [id])
 
   @@index([orderId])
+}
+
+// ---------------------------------------------------------------- bookings
+
+enum BookingStatus {
+  NEW
+  ACCEPTED
+  DECLINED
+}
+
+/// A customer asking for a time — deliberately NOT an Order.
+///
+/// The owner confirms before anything lands in the day: a stranger filling in a
+/// form must never be able to book Gabriel into a slot he cannot do. Accepting
+/// one creates the Customer, the Order and the ScheduleEvent; until then this
+/// is only a request.
+///
+/// Written by an unauthenticated endpoint, so treat every field as hostile:
+/// length-capped here, validated and rate-limited at the door.
+model BookingRequest {
+  id        String        @id @default(cuid())
+  status    BookingStatus @default(NEW)
+
+  name      String
+  phone     String
+  email     String?
+  suburb    String
+  jobType   JobType
+  notes     String?
+
+  /// When the customer would like it. A preference, not a commitment.
+  preferredAt    DateTime
+  alternateAt    DateTime?
+
+  createdAt   DateTime  @default(now())
+  decidedAt   DateTime?
+  declineNote String?
+
+  /// Set once accepted — the job this request turned into.
+  orderId String? @unique
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  @@index([status, createdAt])
 }
 
 // ---------------------------------------------------------------- scheduling

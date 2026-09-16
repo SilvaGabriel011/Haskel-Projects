@@ -44,6 +44,7 @@ export async function listStaff(): Promise<Staff[]> {
 export {
   demoModeEnabled,
   demoPasswordEnvFor,
+  emailOnDomain,
   googleSignInBlockedReason,
   workspaceDomain,
 } from "./access-config";

@@ -2,5 +2,15 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": "haskel-site",
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/book",
+      "destination": "https://ops.haskelprojects.com.au/book"
+    },
+    {
+      "source": "/api/book",
+      "destination": "https://ops.haskelprojects.com.au/api/book"
+    }
+  ]
 }
