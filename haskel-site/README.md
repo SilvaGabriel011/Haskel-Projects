@@ -1,4 +1,4 @@
-# Haskel Projects — landing page
+# Haskel Project — landing page
 
 Site estatico. Uma pagina, sem build, sem dependencia.
 

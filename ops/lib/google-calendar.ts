@@ -14,8 +14,22 @@
  */
 import type { EventKind } from "@prisma/client";
 
-/** Adelaide does not sit on a whole-hour offset, so never hardcode one. */
-export const BUSINESS_TIMEZONE = "Australia/Adelaide";
+/**
+ * The IANA zone the business works in (e.g. "Australia/Sydney"), from
+ * BUSINESS_TIMEZONE. Never hardcode an offset: several Australian zones sit on
+ * half hours and most observe DST. Unset or unrecognised means no sync, rather
+ * than events landing in the diary at a guessed time.
+ */
+export function businessTimezone(): string | null {
+  const tz = process.env.BUSINESS_TIMEZONE?.trim();
+  if (!tz) return null;
+  try {
+    new Intl.DateTimeFormat("en-AU", { timeZone: tz });
+    return tz;
+  } catch {
+    return null;
+  }
+}
 
 export type CalendarPayload = {
   summary: string;
@@ -53,7 +67,7 @@ const KIND_TITLE: Record<EventKind, string> = {
  * mistakes that matter live: a wrong timezone puts an installer at a house at
  * the wrong hour.
  */
-export function toCalendarPayload(b: BookingForCalendar): CalendarPayload {
+export function toCalendarPayload(b: BookingForCalendar, timeZone: string): CalendarPayload {
   const who = b.customerName ?? "Internal";
   const summary = `${KIND_TITLE[b.kind]} — ${who}`;
 
@@ -68,8 +82,8 @@ export function toCalendarPayload(b: BookingForCalendar): CalendarPayload {
     summary,
     description: lines.join("\n"),
     location: b.address,
-    start: { dateTime: b.startAt.toISOString(), timeZone: BUSINESS_TIMEZONE },
-    end: { dateTime: b.endAt.toISOString(), timeZone: BUSINESS_TIMEZONE },
+    start: { dateTime: b.startAt.toISOString(), timeZone },
+    end: { dateTime: b.endAt.toISOString(), timeZone },
     ...(b.assigneeEmails?.length ? { attendees: b.assigneeEmails.map((email) => ({ email })) } : {}),
   };
 }
@@ -81,6 +95,7 @@ export type SyncResult =
 export function calendarConfigured(): boolean {
   return Boolean(
     process.env.GOOGLE_CALENDAR_ID &&
+      businessTimezone() &&
       process.env.AUTH_GOOGLE_ID &&
       process.env.AUTH_GOOGLE_SECRET,
   );

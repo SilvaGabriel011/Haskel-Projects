@@ -28,7 +28,7 @@ export default async function LoginPage({
         <div className="flex items-center gap-3">
           <div className="grid place-items-center w-10 h-10 rounded-xl bg-rose font-bold">H</div>
           <div>
-            <div className="font-semibold leading-tight">Haskel Projects</div>
+            <div className="font-semibold leading-tight">Haskel Project</div>
             <div className="text-xs tracking-widest uppercase text-white/50">Back office</div>
           </div>
         </div>
@@ -62,7 +62,7 @@ export default async function LoginPage({
           <p className="mt-3 text-sm text-ink-2">
             {domain
               ? `Use your @${domain} account.`
-              : "Use your Haskel Projects Google account."}
+              : "Use your Haskel Project Google account."}
           </p>
 
           {error ? (
@@ -70,7 +70,7 @@ export default async function LoginPage({
               role="alert"
               className="mt-6 rounded-xl border border-rose bg-blush px-4 py-3 text-sm"
             >
-              That account cannot sign in here. It must be a Haskel Projects account on the
+              That account cannot sign in here. It must be a Haskel Project account on the
               staff list — check with Gabriel if you think it should be.
             </p>
           ) : null}

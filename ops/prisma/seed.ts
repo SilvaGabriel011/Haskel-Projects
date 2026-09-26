@@ -36,7 +36,7 @@ const chance = (p: number) => rnd() < p;
 const SUBURBS = [
   "Prospect", "Norwood", "Glenelg", "Unley", "Henley Beach", "Burnside",
   "Modbury", "Mawson Lakes", "Brighton", "Magill", "Woodville", "Aldinga",
-  "Semaphore", "Mitcham", "Golden Grove", "Port Adelaide",
+  "Semaphore", "Mitcham", "Golden Grove",
 ] as const;
 
 const FIRST = ["Sarah","Tom","Priya","Dave","Emma","Luca","Chloe","Ben","Anh","Marco",
@@ -47,17 +47,17 @@ const LAST = ["Nguyen","Patel","Hughes","Costa","Barnes","Willis","Tran","Rossi"
 const MATERIALS: ReadonlyArray<{
   name: string; kind: MaterialKind; supplier: string; finish: string; cents: number;
 }> = [
-  { name: "Calacatta Gold",   kind: "ENGINEERED", supplier: "Adelaide Stone Co", finish: "Polished",  cents: 48000 },
-  { name: "White Truffle",    kind: "ENGINEERED", supplier: "Adelaide Stone Co", finish: "Matte",     cents: 42000 },
-  { name: "Carrara Mist",     kind: "ENGINEERED", supplier: "Adelaide Stone Co", finish: "Polished",  cents: 39000 },
-  { name: "Concreto Grigio",  kind: "ENGINEERED", supplier: "SA Surfaces",       finish: "Low sheen", cents: 36000 },
+  { name: "Calacatta Gold",   kind: "ENGINEERED", supplier: "Coastline Stone Co", finish: "Polished",  cents: 48000 },
+  { name: "White Truffle",    kind: "ENGINEERED", supplier: "Coastline Stone Co", finish: "Matte",     cents: 42000 },
+  { name: "Carrara Mist",     kind: "ENGINEERED", supplier: "Coastline Stone Co", finish: "Polished",  cents: 39000 },
+  { name: "Concreto Grigio",  kind: "ENGINEERED", supplier: "Surface Supply",    finish: "Low sheen", cents: 36000 },
   { name: "Nero Assoluto",    kind: "NATURAL",    supplier: "Torrens Granite",   finish: "Satin",     cents: 61000 },
-  { name: "Storm Grey",       kind: "ENGINEERED", supplier: "SA Surfaces",       finish: "Matte",     cents: 34000 },
-  { name: "Alpine White",     kind: "ENGINEERED", supplier: "Adelaide Stone Co", finish: "Polished",  cents: 31000 },
+  { name: "Storm Grey",       kind: "ENGINEERED", supplier: "Surface Supply",    finish: "Matte",     cents: 34000 },
+  { name: "Alpine White",     kind: "ENGINEERED", supplier: "Coastline Stone Co", finish: "Polished",  cents: 31000 },
   { name: "Sintered Graphite",kind: "SINTERED",   supplier: "Novastone",         finish: "Matte",     cents: 72000 },
   { name: "Sintered Bianco",  kind: "SINTERED",   supplier: "Novastone",         finish: "Polished",  cents: 69000 },
   { name: "Tuscan Travertine",kind: "NATURAL",    supplier: "Torrens Granite",   finish: "Honed",     cents: 55000 },
-  { name: "Ash Quartz",       kind: "ENGINEERED", supplier: "SA Surfaces",       finish: "Matte",     cents: 33000 },
+  { name: "Ash Quartz",       kind: "ENGINEERED", supplier: "Surface Supply",    finish: "Matte",     cents: 33000 },
   { name: "Onyx Shadow",      kind: "NATURAL",    supplier: "Torrens Granite",   finish: "Polished",  cents: 78000 },
 ];
 
@@ -106,9 +106,9 @@ async function main() {
 
   // ---- people -----------------------------------------------------------
   const staff = await Promise.all([
-    db.user.create({ data: { email: "admin@haskelprojects.com.au",      name: "Gabriel Silva", role: "ADMIN" } }),
-    db.user.create({ data: { email: "installer@haskelprojects.com.au",  name: "Dave Whitlock", role: "EMPLOYEE" } }),
-    db.user.create({ data: { email: "apprentice@haskelprojects.com.au", name: "Sam Reid",      role: "EMPLOYEE" } }),
+    db.user.create({ data: { email: "admin@haskelproject.com.au",      name: "Gabriel Silva", role: "ADMIN" } }),
+    db.user.create({ data: { email: "installer@haskelproject.com.au",  name: "Dave Whitlock", role: "EMPLOYEE" } }),
+    db.user.create({ data: { email: "apprentice@haskelproject.com.au", name: "Sam Reid",      role: "EMPLOYEE" } }),
   ]);
   const [admin] = staff;
   const crew = staff.slice(1);
