@@ -158,7 +158,14 @@ This is a second, separate project in the same repository.
 2. **Root Directory: `ops`** — this is the important one
 3. Framework preset: Next.js (detected automatically)
 4. Add the environment variables from `.env.example`
+   (`DATABASE_URL` is Supabase's transaction pooler on 6543 with
+   `?pgbouncer=true`; `DIRECT_URL` is its **session** pooler on 5432)
 5. Deploy, then Settings → Domains → add `ops.haskelproject.com.au`
+
+Production deploys apply pending migrations before building
+(`scripts/migrate-on-deploy.mjs`). Preview deploys never touch the schema, so a
+branch cannot change the live database. Functions run in Sydney (`syd1`,
+`vercel.json`); keep the Supabase project in Sydney too.
 
 The existing `haskel-projects` project is untouched and keeps serving the
 public site from `haskel-site/`.
