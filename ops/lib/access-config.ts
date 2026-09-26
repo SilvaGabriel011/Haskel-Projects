@@ -43,7 +43,7 @@ export function googleSignInBlockedReason(): string | null {
  *
  * Compares the domain part exactly rather than asking whether the address ends
  * with the domain. `endsWith` happens to reject the lookalike
- * `x@evilhaskelprojects.com.au` only because the "@" is part of the needle —
+ * `x@evilhaskelproject.com.au` only because the "@" is part of the needle —
  * that is luck holding it up, not intent. A subdomain is also not the domain.
  */
 export function emailOnDomain(email: string, domain: string): boolean {

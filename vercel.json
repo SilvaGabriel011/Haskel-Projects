@@ -6,11 +6,11 @@
   "rewrites": [
     {
       "source": "/book",
-      "destination": "https://ops.haskelprojects.com.au/book"
+      "destination": "https://ops.haskelproject.com.au/book"
     },
     {
       "source": "/api/book",
-      "destination": "https://ops.haskelprojects.com.au/api/book"
+      "destination": "https://ops.haskelproject.com.au/api/book"
     }
   ]
 }

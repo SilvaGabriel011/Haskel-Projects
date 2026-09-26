@@ -5,7 +5,7 @@ import { BookingForm } from "@/components/booking-form";
 export const metadata: Metadata = {
   title: "Book a free measure & quote",
   description:
-    "Ask for a time that suits you. We will ring to confirm. Small stone jobs and offcut benchtops across Adelaide.",
+    "Ask for a time that suits you. We will ring to confirm. Small stone jobs and offcut benchtops.",
   robots: { index: true, follow: true },
 };
 
@@ -18,9 +18,9 @@ export default function BookPage() {
           <div className="flex items-center gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-xl bg-rose font-bold">H</div>
             <div>
-              <div className="font-semibold leading-tight">Haskel Projects</div>
+              <div className="font-semibold leading-tight">Haskel Project</div>
               <div className="text-xs uppercase tracking-[0.16em] text-white/50">
-                Stonemasonry · Adelaide
+                Stonemasonry
               </div>
             </div>
           </div>

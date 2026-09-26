@@ -6,7 +6,7 @@ export const metadata: Metadata = {
     default: "Haskel Ops",
     template: "%s · Haskel Ops",
   },
-  description: "Internal back office for Haskel Projects Pty.",
+  description: "Internal back office for Haskel Project Pty.",
   robots: { index: false, follow: false },
 };
 

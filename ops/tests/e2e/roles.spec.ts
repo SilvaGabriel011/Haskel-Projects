@@ -9,11 +9,11 @@ import { expect, test, type Page } from "@playwright/test";
  *   E2E_ADMIN_PASSWORD=... E2E_INSTALLER_PASSWORD=... npm run test:e2e
  */
 const ADMIN = {
-  email: "admin@haskelprojects.com.au",
+  email: "admin@haskelproject.com.au",
   password: process.env.E2E_ADMIN_PASSWORD ?? "",
 };
 const INSTALLER = {
-  email: "installer@haskelprojects.com.au",
+  email: "installer@haskelproject.com.au",
   password: process.env.E2E_INSTALLER_PASSWORD ?? "",
 };
 
