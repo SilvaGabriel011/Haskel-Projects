@@ -1,8 +1,14 @@
 /**
  * Demo data — invented, but shaped like the real business.
  *
- * DETERMINISTIC: a fixed-seed PRNG, so `npm run db:reset` reproduces byte-identical
- * data. Screenshots stay stable and "it looked different yesterday" never happens.
+ * DETERMINISTIC WITHIN A DAY: a fixed-seed PRNG, and the whole timeline hangs
+ * off midnight today in the business zone. Reseeding on the same day reproduces
+ * byte-identical data, so screenshots stay stable and CI is reproducible.
+ *
+ * It used to hang off a hard-coded date, which was deterministic forever and
+ * quietly rotted: a fortnight later every job on the follow-up board was weeks
+ * overdue and the whole thing showed red, so the one distinction it exists to
+ * draw could not be seen. Demo data that ages is demo data that misleads.
  *
  * Weighted to reflect what Haskel actually does: offcut and small jobs dominate,
  * benchtop installs are the minority.
@@ -19,7 +25,8 @@ import {
 } from "@prisma/client";
 
 import { hashPassword } from "../lib/password";
-import { zonedParts, zonedTime } from "../lib/business-time";
+import { STAGE_DAYS } from "../lib/board";
+import { startOfDay, zonedParts, zonedTime } from "../lib/business-time";
 
 // ---- deterministic randomness (mulberry32) -------------------------------
 let _s = 0x9e3779b9;
@@ -88,7 +95,8 @@ const db = new PrismaClient({ adapter });
 const LABOUR_RATE = 9500;
 
 const MONTHS_BACK = 12;
-const NOW = new Date("2026-09-15T00:00:00Z");
+/** Midnight today, business time — so the demo is always "now". */
+const NOW = startOfDay(new Date());
 const daysAgo = (d: number) => new Date(NOW.getTime() - d * 86_400_000);
 
 async function main() {
@@ -245,6 +253,32 @@ async function main() {
     const won = ["WON","CUTTING","TEMPLATED","FABRICATING","SCHEDULED","INSTALLED","COMPLETE"].includes(status);
     const done = status === "COMPLETE";
 
+    /*
+     * When a job still in flight last moved.
+     *
+     * Age alone used to decide status, which left jobs sitting at WON or
+     * TEMPLATED for two months — past every threshold on the follow-up board,
+     * so every card showed red and the one distinction the board draws could
+     * not be seen. A working business is mostly on top of its live jobs with a
+     * few stragglers, so that is the shape: roughly seven in ten inside the
+     * stage's own limit, two slipping, one genuinely stalled.
+     */
+    const limit = STAGE_DAYS[status];
+    const q = rnd();
+    const stageDays = Number.isFinite(limit.late)
+      ? q < 0.7 ? int(0, Math.max(0, limit.warn - 1))
+        : q < 0.9 ? int(limit.warn, limit.late - 1)
+        : int(limit.late, limit.late * 2)
+      : 0;
+    // Post-win stages date from wonAt, earlier ones from createdAt.
+    const stageAt = daysAgo(stageDays);
+    const liveWonAt = won && !done ? stageAt : null;
+    const liveCreatedAt = done || status === "LOST"
+      ? createdAt
+      : won
+        ? new Date(stageAt.getTime() - int(2, 20) * 86_400_000)  // enquiry came first
+        : stageAt;
+
     jobNo++;
     const order = await db.order.create({
       data: {
@@ -256,8 +290,8 @@ async function main() {
         depositCents: won ? Math.round(quoteCents * 0.3) : 0,
         estimatedHours: hours,
         actualHours: done ? Number((hours * (0.85 + rnd() * 0.4)).toFixed(1)) : 0,
-        createdAt,
-        wonAt: won ? new Date(createdAt.getTime() + int(1, 9) * 86_400_000) : null,
+        createdAt: liveCreatedAt,
+        wonAt: liveWonAt ?? (won ? new Date(createdAt.getTime() + int(1, 9) * 86_400_000) : null),
         completedAt: done ? new Date(createdAt.getTime() + int(10, 40) * 86_400_000) : null,
         lostReason: status === "LOST" ? pick(["Went with a cheaper quote","Renovation postponed","No reply after quote","Wanted a full slab"] as const) : null,
       },

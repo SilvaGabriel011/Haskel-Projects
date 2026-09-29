@@ -22,8 +22,47 @@ The two deploy independently and neither can break the other.
 | 8a | Booking requests from the website | Done |
 | 8b | Calendar sync on accept | **Wired, waiting on credentials** |
 | 9 | Putting stock on the rack by hand | Done |
+| 10 | Follow-up board (overdue, missing detail) | Done |
 
 Every screen now runs on real (seeded) data. No shells left.
+
+## The follow-up board
+
+`/orders` answers "where is everything". `/board` answers the different
+question of **what is going wrong**, and is the screen to open each morning.
+
+Every job still in flight gets a card, coloured by the worse of two signals:
+
+- **How long it has sat**, against a threshold that differs per stage. An
+  enquiry goes amber after two days and red after four; fabrication after ten
+  and eighteen. One number for every stage would either nag about fabrication
+  or miss dead leads.
+- **What the office is missing.** No phone number, no site address on a won
+  job, nothing on the cut list — each card lists the gaps in words. Blocking
+  gaps (the job cannot proceed) are red; the rest are amber.
+
+A booked date that has come and gone with the job unfinished is red on its own.
+
+Two things worth knowing:
+
+- **It sees through placeholders.** `acceptBooking` writes "To confirm on the
+  call" into the address, which is a real string in a required column — so a
+  job can look complete while nobody knows where to drive. `TBC`, `n/a`,
+  `unknown` and `---` count as blank too.
+- **It does not cry wolf.** A fresh enquiry is *allowed* to have no address and
+  no cut list; those only become gaps once the job is won. A board that flags
+  everything gets ignored.
+
+Filters across the top narrow to what needs a look, what is overdue, what is
+missing detail, or what has a date gone by — each with a count.
+
+An employee sees the board but never a money gap: `quoteCents` is not read for
+them, and `lib/board.ts` treats absent as "not my business" rather than as
+zero, so they are never shown something they cannot see or fix.
+
+The rules are in `lib/board.ts`, free of the database and unit tested — the
+thresholds are judgement calls, and they belong somewhere they can be read and
+argued with rather than buried in a component.
 
 ## Putting stock on the rack
 
@@ -97,7 +136,7 @@ npm run dev           # http://localhost:3000
 ```bash
 npm run typecheck     # tsc, no emit
 npm run lint
-npm test              # 117 unit tests — query layer, pipeline rules, seed integrity, input rules
+npm test              # 170 unit tests — query layer, pipeline rules, seed integrity, input rules
 npm run build         # full production build
 ```
 
@@ -109,7 +148,7 @@ npm run dev -- -p 3111 &                        # the port playwright.config.ts 
 E2E_ADMIN_PASSWORD=... E2E_INSTALLER_PASSWORD=... npm run test:e2e
 ```
 
-26 tests: every route's landing place signed out and per role, the absence of
+28 tests: every route's landing place signed out and per role, the absence of
 any dollar amount on employee pages, that adding `?who=` to the schedule does
 not widen what an employee sees, and that `/book` opens without signing in.
 
@@ -126,7 +165,7 @@ Two roles, defined once in `lib/roles.ts` and read by everything else.
 
 | | Admin | Employee |
 |---|---|---|
-| Stock, offcuts, orders, schedule | yes | yes |
+| Stock, offcuts, orders, schedule, follow-up board | yes | yes |
 | Adding stock | yes | **no** |
 | Booking requests from the website | yes | **no** |
 | Cost prices, quotes, margins | yes | **no** |
@@ -245,6 +284,8 @@ ops/
 │   ├── staff.ts       staff lookups, backed by the User table
 │   ├── pipeline.ts    the two pipelines, legal transitions, shared phase mapping
 │   ├── stock-input.ts what may go on the rack — pure rules, unit tested
+│   ├── board.ts       follow-up thresholds and missing-detail rules
+│   ├── business-time.ts  days, weeks and months in the business's zone
 │   ├── queries/       role-aware reads — the money never leaves the server
 │   └── google-calendar.ts  booking → calendar event (sync pending credentials)
 ├── app/
