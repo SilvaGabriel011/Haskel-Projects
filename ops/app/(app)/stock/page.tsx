@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { AddStock } from "@/components/add-stock";
 import { PageHead } from "@/components/page-head";
 import { Card, Empty, FilterChips, Pill, SectionTitle, Tile, dims, sqm, when } from "@/components/ui";
 import { requireAccess } from "@/lib/guard";
 import { formatAud } from "@/lib/money";
 import {
-  listConsumables, listSlabs, lowStockConsumables, recentMovements, stockCounts, stockValueCents,
+  listConsumables, listMaterialOptions, listSlabOptions, listSlabs, lowStockConsumables,
+  recentMovements, stockCounts, stockValueCents,
 } from "@/lib/queries/stock";
 import type { SlabStatus } from "@prisma/client";
 
@@ -36,22 +38,33 @@ export default async function StockPage({
   const { status } = await searchParams;
   const filter = (["IN_STOCK", "RESERVED", "CUT", "SOLD"] as const).find((s) => s === status);
 
-  const [slabs, counts, low, consumables, movements, valueCents] = await Promise.all([
-    listSlabs(user.role, filter ? { status: filter } : {}),
-    stockCounts(),
-    lowStockConsumables(),
-    listConsumables(user.role),
-    recentMovements(8),
-    isAdmin ? stockValueCents() : Promise.resolve(0),
-  ]);
+  const [slabs, counts, low, consumables, movements, valueCents, materialOptions, slabOptions] =
+    await Promise.all([
+      listSlabs(user.role, filter ? { status: filter } : {}),
+      stockCounts(),
+      lowStockConsumables(),
+      listConsumables(user.role),
+      recentMovements(8),
+      isAdmin ? stockValueCents() : Promise.resolve(0),
+      // Only an admin can add stock, so only an admin pays for these queries.
+      isAdmin ? listMaterialOptions() : Promise.resolve([]),
+      isAdmin ? listSlabOptions() : Promise.resolve([]),
+    ]);
 
   return (
     <>
-      <PageHead
-        eyebrow="The rack and the shed"
-        title={<>stock</>}
-        lede="Every slab you hold, what has been cut from it, and what is running low."
-      />
+      <div className="flex flex-wrap items-start justify-between gap-6">
+        <PageHead
+          eyebrow="The rack and the shed"
+          title={<>stock</>}
+          lede="Every slab you hold, what has been cut from it, and what is running low."
+        />
+        {isAdmin ? (
+          <div className="pt-2">
+            <AddStock materials={materialOptions} slabs={slabOptions} />
+          </div>
+        ) : null}
+      </div>
 
       <section className="mt-9 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Tile label="Slabs in stock" value={counts.slabsInStock} sub={`${counts.slabsReserved} reserved`} />
@@ -97,7 +110,13 @@ export default async function StockPage({
         </div>
 
         {slabs.length === 0 ? (
-          <Empty>No slabs match that filter.</Empty>
+          <Empty>
+            {filter
+              ? "No slabs match that filter."
+              : isAdmin
+                ? "Nothing on the rack yet. Use Add stock to put the first slab on."
+                : "Nothing on the rack yet."}
+          </Empty>
         ) : (
           <div className="overflow-x-auto rounded-[18px] border border-line bg-white">
             <table className="w-full min-w-[720px] text-sm">
@@ -149,6 +168,9 @@ export default async function StockPage({
       <div className="mt-10 grid gap-8 lg:grid-cols-2">
         <section>
           <SectionTitle>Consumables</SectionTitle>
+          {consumables.length === 0 ? (
+            <Empty>Nothing tracked yet — adhesive, blades and sealer go here.</Empty>
+          ) : (
           <Card className="divide-y divide-line">
             {consumables.map((c) => {
               const short = c.qtyOnHand <= c.reorderPoint;
@@ -171,10 +193,14 @@ export default async function StockPage({
               );
             })}
           </Card>
+          )}
         </section>
 
         <section>
           <SectionTitle>Recent movement</SectionTitle>
+          {movements.length === 0 ? (
+            <Empty>No movement yet. Anything you add or use shows up here.</Empty>
+          ) : (
           <Card className="divide-y divide-line">
             {movements.map((m) => (
               <div key={m.id} className="px-5 py-3 text-sm">
@@ -193,6 +219,7 @@ export default async function StockPage({
               </div>
             ))}
           </Card>
+          )}
         </section>
       </div>
     </>

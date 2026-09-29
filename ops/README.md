@@ -21,8 +21,38 @@ The two deploy independently and neither can break the other.
 | — | Settings (people and access) | Done |
 | 8a | Booking requests from the website | Done |
 | 8b | Calendar sync on accept | **Wired, waiting on credentials** |
+| 9 | Putting stock on the rack by hand | Done |
 
 Every screen now runs on real (seeded) data. No shells left.
+
+## Putting stock on the rack
+
+**Add stock** on `/stock` opens a short wizard: what you are adding, the
+material, the piece itself, then a page that reads it all back before anything
+is written. Three things go in this way — a slab, an offcut, or a consumable.
+
+Admin only, and asserted in the action rather than assumed from the page: a
+server action is its own endpoint and can be called without the modal ever
+being opened. Every branch either records a cost or creates a material with a
+cost per m², and money is admin-only throughout.
+
+A few decisions worth knowing:
+
+- **A new material can be created alongside the first slab that uses it**, so
+  an empty database is not a dead end. With nothing on file the wizard says so
+  and goes straight to the new-material fields.
+- **Offcuts carry no cost of their own.** What one is worth follows from its
+  material and the slab it came off, so there is no figure to type in wrong.
+- **References are never reused.** `nextRef` takes the highest number in use
+  rather than the count, so deleting `SLB-0003` cannot hand its number to a
+  different slab later — people write these on the stone itself.
+- **Every add writes a `RECEIVED` movement** naming what arrived and who put it
+  there, so the log on `/stock` stays complete.
+- **Amounts are parsed, not rounded.** `10.005` is refused rather than guessed
+  at; `$1,200.50` is accepted. Money stays integer cents the whole way.
+
+The rules live in `lib/stock-input.ts`, free of the database so they are unit
+tested directly rather than only by clicking through the modal.
 
 ## The one public route
 
@@ -67,7 +97,7 @@ npm run dev           # http://localhost:3000
 ```bash
 npm run typecheck     # tsc, no emit
 npm run lint
-npm test              # 61 unit tests — query layer, pipeline rules, seed integrity
+npm test              # 117 unit tests — query layer, pipeline rules, seed integrity, input rules
 npm run build         # full production build
 ```
 
@@ -75,13 +105,17 @@ npm run build         # full production build
 and takes the demo passwords from the environment so none are hardcoded:
 
 ```bash
-npm run dev &                                   # or point E2E_BASE_URL elsewhere
+npm run dev -- -p 3111 &                        # the port playwright.config.ts expects
 E2E_ADMIN_PASSWORD=... E2E_INSTALLER_PASSWORD=... npm run test:e2e
 ```
 
-21 tests: every route's landing place signed out and per role, the absence of
-any dollar amount on employee pages, and that adding `?who=` to the schedule
-does not widen what an employee sees.
+26 tests: every route's landing place signed out and per role, the absence of
+any dollar amount on employee pages, that adding `?who=` to the schedule does
+not widen what an employee sees, and that `/book` opens without signing in.
+
+The port matters. `playwright.config.ts` defaults to **3111**, so a server on
+3000 fails all 26 with `ERR_CONNECTION_REFUSED` — which looks exactly like a
+real regression. Either use the flag above or set `E2E_BASE_URL`.
 
 `@playwright/test` is pinned to **1.56.1** to match the preinstalled browsers.
 Bumping it without matching browsers fails with "Executable doesn't exist".
@@ -93,6 +127,8 @@ Two roles, defined once in `lib/roles.ts` and read by everything else.
 | | Admin | Employee |
 |---|---|---|
 | Stock, offcuts, orders, schedule | yes | yes |
+| Adding stock | yes | **no** |
+| Booking requests from the website | yes | **no** |
 | Cost prices, quotes, margins | yes | **no** |
 | Financial dashboards | yes | **no** |
 | Settings and people | yes | **no** |
@@ -208,6 +244,7 @@ ops/
 │   ├── guard.ts       server-side assertions used by every protected page
 │   ├── staff.ts       staff lookups, backed by the User table
 │   ├── pipeline.ts    the two pipelines, legal transitions, shared phase mapping
+│   ├── stock-input.ts what may go on the rack — pure rules, unit tested
 │   ├── queries/       role-aware reads — the money never leaves the server
 │   └── google-calendar.ts  booking → calendar event (sync pending credentials)
 ├── app/
