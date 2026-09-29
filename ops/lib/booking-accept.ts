@@ -17,6 +17,7 @@
  */
 import { Prisma, type BookingRequest } from "@prisma/client";
 
+import { zonedParts } from "@/lib/business-time";
 import { db } from "@/lib/db";
 import { findTimeConflicts, type TimeConflict } from "@/lib/conflicts";
 
@@ -30,8 +31,9 @@ export type AcceptResult =
 class AlreadyDecided extends Error {}
 
 function jobNumberFor(now: Date, n: number) {
-  const yy = now.getFullYear().toString().slice(2);
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const { year, month } = zonedParts(now);
+  const yy = String(year).slice(2);
+  const mm = String(month).padStart(2, "0");
   return `HP-${yy}${mm}-B${String(n).padStart(3, "0")}`;
 }
 

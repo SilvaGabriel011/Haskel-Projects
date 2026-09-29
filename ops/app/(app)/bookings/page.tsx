@@ -6,6 +6,7 @@ import { PageHead } from "@/components/page-head";
 import { Card, Empty, Pill, SectionTitle, Tile } from "@/components/ui";
 import { BOOKABLE_LABEL } from "@/lib/booking";
 import { MEASURE_MINUTES } from "@/lib/booking-accept";
+import { businessZone, formatDate } from "@/lib/business-time";
 import { findDuplicateRequests, findTimeConflicts } from "@/lib/conflicts";
 import { calendarConfigured } from "@/lib/google-calendar";
 import { requireAdmin } from "@/lib/guard";
@@ -62,7 +63,7 @@ export default async function BookingsPage({
         >
           <b>Booked as {accepted}</b>
           {at
-            ? ` for ${new Date(at).toLocaleString("en-AU", {
+            ? ` for ${formatDate(new Date(at), {
                 weekday: "short", day: "numeric", month: "short",
                 hour: "numeric", minute: "2-digit",
               })}`
@@ -100,6 +101,7 @@ export default async function BookingsPage({
                 label={BOOKABLE_LABEL[r.jobType] ?? r.jobType}
                 clashes={clashes[i]}
                 duplicates={duplicates.get(r.id) ?? []}
+                timeZone={businessZone()}
               />
             ))}
           </Card>

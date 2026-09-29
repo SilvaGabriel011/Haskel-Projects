@@ -22,12 +22,15 @@ type Req = {
   createdAt: Date;
 };
 
-const hhmm = (d: Date) => d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" });
-const clashLine = (c: Clash) =>
-  `${c.jobNumber ?? "Internal"} · ${c.kind.toLowerCase()} ${hhmm(c.startAt)} to ${hhmm(c.endAt)}`;
+// Formatted in the business zone, passed down from the server: rendering on the
+// server (UTC) and again in the browser must agree, and both must say Perth.
+const hhmm = (d: Date, tz?: string) => d.toLocaleTimeString("en-AU", { timeZone: tz, hour: "numeric", minute: "2-digit" });
+const clashLine = (c: Clash, tz?: string) =>
+  `${c.jobNumber ?? "Internal"} · ${c.kind.toLowerCase()} ${hhmm(c.startAt, tz)} to ${hhmm(c.endAt, tz)}`;
 
-const when = (d: Date) =>
+const whenIn = (d: Date, tz?: string) =>
   d.toLocaleString("en-AU", {
+    timeZone: tz,
     weekday: "short", day: "numeric", month: "short",
     hour: "numeric", minute: "2-digit",
   });
@@ -37,12 +40,15 @@ export function BookingRow({
   label,
   clashes,
   duplicates,
+  timeZone,
 }: {
   req: Req;
   label: string;
   clashes: { preferred: Clash[]; alternate: Clash[] };
   duplicates: Twin[];
+  timeZone?: string;
 }) {
+  const when = (d: Date) => whenIn(d, timeZone);
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
@@ -161,7 +167,7 @@ export function BookingRow({
           <ul className="mt-2 list-disc pl-5 text-xs">
             {confirm.map((c) => (
               <li key={c.eventId}>
-                {clashLine(c)}
+                {clashLine(c, timeZone)}
                 {c.people.length ? ` · ${c.people.join(", ")}` : ""}
               </li>
             ))}

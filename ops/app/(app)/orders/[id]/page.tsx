@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { AdvanceButton } from "@/components/advance-button";
 import { StockReserve } from "@/components/stock-reserve";
 import { Card, Empty, Pill, SectionTitle, dims, when } from "@/components/ui";
+import { formatDate, formatTime } from "@/lib/business-time";
 import { requireAccess } from "@/lib/guard";
 import { LABOUR_RATE_CENTS, formatAud, marginCents, marginPct } from "@/lib/money";
 import { PIPELINE_LABEL, STAGES, STATUS_LABEL, nextStage } from "@/lib/pipeline";
@@ -194,8 +195,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   <div className="flex items-center justify-between gap-3">
                     <Pill tone="busy">{e.kind.toLowerCase()}</Pill>
                     <span className="text-xs tabular-nums text-ink-2">
-                      {e.startAt.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}{" "}
-                      {e.startAt.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}
+                      {formatDate(e.startAt, { day: "numeric", month: "short" })}{" "}
+                      {formatTime(e.startAt)}
                     </span>
                   </div>
                   <div className="mt-2 text-xs text-ink-2">
