@@ -7,22 +7,12 @@
  */
 import type { Role } from "@prisma/client";
 
+import { addDays, daysBetween, startOfDay, weekStart } from "@/lib/business-time";
 import { db } from "@/lib/db";
 
-/** Monday of the week containing `d`, at local midnight. */
-export function weekStart(d: Date): Date {
-  const out = new Date(d);
-  const dow = (out.getDay() + 6) % 7; // Monday = 0
-  out.setDate(out.getDate() - dow);
-  out.setHours(0, 0, 0, 0);
-  return out;
-}
-
-export function addDays(d: Date, n: number): Date {
-  const out = new Date(d);
-  out.setDate(out.getDate() + n);
-  return out;
-}
+// Weeks and days are the business's, not the server's: the server runs in UTC,
+// where Monday midnight is 8am in Perth. See lib/business-time.ts.
+export { addDays, weekStart };
 
 /**
  * Whose events this viewer may see.
@@ -66,8 +56,7 @@ export async function listWeek(from: Date, userId?: string) {
 
 /** Today's run, for the person standing in front of the job. */
 export async function listDay(day: Date, userId?: string) {
-  const from = new Date(day);
-  from.setHours(0, 0, 0, 0);
+  const from = startOfDay(day);
   return db.scheduleEvent.findMany({
     where: {
       startAt: { gte: from, lt: addDays(from, 1) },
@@ -82,7 +71,7 @@ export async function listDay(day: Date, userId?: string) {
 export function byDay<T extends { startAt: Date }>(events: T[], from: Date): T[][] {
   const days: T[][] = Array.from({ length: 7 }, () => []);
   for (const e of events) {
-    const i = Math.floor((e.startAt.getTime() - from.getTime()) / 86_400_000);
+    const i = daysBetween(from, e.startAt);
     if (i >= 0 && i < 7) days[i].push(e);
   }
   return days;

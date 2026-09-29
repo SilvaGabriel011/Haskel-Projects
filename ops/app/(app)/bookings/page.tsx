@@ -5,6 +5,9 @@ import { BookingRow } from "@/components/booking-row";
 import { PageHead } from "@/components/page-head";
 import { Card, Empty, Pill, SectionTitle, Tile } from "@/components/ui";
 import { BOOKABLE_LABEL } from "@/lib/booking";
+import { MEASURE_MINUTES } from "@/lib/booking-accept";
+import { businessZone, formatDate } from "@/lib/business-time";
+import { findDuplicateRequests, findTimeConflicts } from "@/lib/conflicts";
 import { calendarConfigured } from "@/lib/google-calendar";
 import { requireAdmin } from "@/lib/guard";
 import { db } from "@/lib/db";
@@ -16,7 +19,7 @@ export default async function BookingsPage({
 }: {
   searchParams: Promise<{ accepted?: string; at?: string; calendar?: string }>;
 }) {
-  await requireAdmin();
+  const me = await requireAdmin();
   const { accepted, at, calendar } = await searchParams;
 
   const [pending, decided, counts] = await Promise.all([
@@ -31,6 +34,19 @@ export default async function BookingsPage({
   ]);
 
   const n = (s: string) => counts.find((c) => c.status === s)?._count ?? 0;
+
+  // Flag trouble before anyone clicks: what each asked-for time would clash
+  // with in the admin's diary, and requests that look like the same customer.
+  const slot = (d: Date) => [d, new Date(d.getTime() + MEASURE_MINUTES * 60 * 1000)] as const;
+  const [clashes, duplicates] = await Promise.all([
+    Promise.all(
+      pending.map(async (r) => ({
+        preferred: await findTimeConflicts(...slot(r.preferredAt), [me.id]),
+        alternate: r.alternateAt ? await findTimeConflicts(...slot(r.alternateAt), [me.id]) : [],
+      })),
+    ),
+    findDuplicateRequests(pending),
+  ]);
 
   return (
     <>
@@ -47,7 +63,7 @@ export default async function BookingsPage({
         >
           <b>Booked as {accepted}</b>
           {at
-            ? ` for ${new Date(at).toLocaleString("en-AU", {
+            ? ` for ${formatDate(new Date(at), {
                 weekday: "short", day: "numeric", month: "short",
                 hour: "numeric", minute: "2-digit",
               })}`
@@ -78,8 +94,15 @@ export default async function BookingsPage({
           <Empty>No requests waiting. They arrive from the booking page on the website.</Empty>
         ) : (
           <Card className="divide-y divide-line">
-            {pending.map((r) => (
-              <BookingRow key={r.id} req={r} label={BOOKABLE_LABEL[r.jobType] ?? r.jobType} />
+            {pending.map((r, i) => (
+              <BookingRow
+                key={r.id}
+                req={r}
+                label={BOOKABLE_LABEL[r.jobType] ?? r.jobType}
+                clashes={clashes[i]}
+                duplicates={duplicates.get(r.id) ?? []}
+                timeZone={businessZone()}
+              />
             ))}
           </Card>
         )}

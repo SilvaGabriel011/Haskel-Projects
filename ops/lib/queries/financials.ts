@@ -15,19 +15,16 @@
  * That is why offcut work shows the margin it does. It is an assumption, not a
  * fact, and the page says so.
  */
+import { formatDate, monthKey, monthStart } from "@/lib/business-time";
 import { db } from "@/lib/db";
 import { LABOUR_RATE_CENTS, marginCents } from "@/lib/money";
 
 const MONTHS = 12;
 
+/** The 1st of the month `n` months ago, at midnight in the business zone. */
 export function monthsBack(n = MONTHS): Date {
-  const d = new Date();
-  d.setMonth(d.getMonth() - n, 1);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return monthStart(new Date(), n);
 }
-
-const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 
 type CompletedJob = {
   id: string;
@@ -88,10 +85,9 @@ export async function revenueSeries(from = monthsBack()) {
 
   const buckets = new Map<string, { month: string; short: number; full: number; jobs: number }>();
   for (let i = 0; i <= MONTHS; i++) {
-    const d = new Date(from);
-    d.setMonth(d.getMonth() + i, 1);
+    const d = monthStart(from, -i);
     buckets.set(monthKey(d), {
-      month: d.toLocaleDateString("en-AU", { month: "short" }),
+      month: formatDate(d, { month: "short" }),
       short: 0,
       full: 0,
       jobs: 0,

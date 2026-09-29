@@ -1,0 +1,203 @@
+# Checks on every pull request and every push to main.
+#
+# Four jobs, run in parallel, each with its own diagnostics on the run page
+# (Summary tab) and its reports kept as artifacts for 14 days:
+#
+#   site     public site: every local link and asset resolves
+#   static   ops: typecheck, lint, production build
+#   unit     ops: the node:test suites against a real, seeded Postgres
+#   e2e      ops: the Playwright role matrix against the built app
+#
+# Nothing here touches production. The database is a throwaway Postgres
+# service container, and the e2e passwords are generated per run and masked.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+  # Throwaway CI database, never a real one.
+  DATABASE_URL: postgresql://haskel:haskel_ci@localhost:5432/haskel_ops
+
+jobs:
+  site:
+    name: Public site
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Check links and assets
+        run: node .github/scripts/check-site.mjs
+
+  static:
+    name: Typecheck, lint, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ops
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ops/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        # The build needs a URL to exist, not to connect to.
+        env:
+          AUTH_SECRET: ci-build-only
+        run: npm run build
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## ${{ job.status == 'success' && '✅' || '❌' }} Typecheck, lint, build"
+            echo
+            echo "Failures here are annotated inline on the diff; the full output is in the job log."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ops
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: haskel
+          POSTGRES_PASSWORD: haskel_ci
+          POSTGRES_DB: haskel_ops
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U haskel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ops/package-lock.json
+      - run: npm ci
+      - name: Migrate
+        run: npx prisma migrate deploy
+      - name: Seed demo data
+        run: npm run db:seed
+      - name: Run suites
+        run: |
+          mkdir -p reports
+          npx tsx --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=junit --test-reporter-destination=reports/unit-junit.xml \
+            tests/*.test.ts
+      - name: Diagnostics
+        if: always()
+        run: node scripts/ci-summary.mjs "Unit tests" reports/unit-junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-report
+          path: ops/reports/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: ops
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: haskel
+          POSTGRES_PASSWORD: haskel_ci
+          POSTGRES_DB: haskel_ops
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U haskel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Demo sign-in exists only for this throwaway app; production ships it off.
+      DEMO_MODE: "true"
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: http://localhost:3111
+      GOOGLE_WORKSPACE_DOMAIN: haskelproject.com.au
+      BUSINESS_TIMEZONE: Australia/Perth
+      E2E_BASE_URL: http://localhost:3111
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ops/package-lock.json
+      - run: npm ci
+      - name: Migrate and seed
+        run: |
+          npx prisma migrate deploy
+          npm run db:seed
+      - name: Per-run credentials
+        run: |
+          echo "AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+          npx tsx scripts/ci-credentials.ts
+      - name: Build
+        run: npm run build
+      - name: Start app
+        run: |
+          nohup npx next start -p 3111 > reports-server.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fsS -o /dev/null http://localhost:3111/login && exit 0
+            sleep 1
+          done
+          echo "App did not come up in 60s"; cat reports-server.log; exit 1
+      - name: Install Chromium
+        # Version pinned in package.json (1.56.1); install the browser it expects.
+        run: npx playwright install --with-deps chromium
+      - name: Run role matrix
+        run: npx playwright test
+      - name: Diagnostics
+        if: always()
+        run: |
+          node scripts/ci-summary.mjs "End-to-end" reports/e2e-junit.xml
+          mkdir -p reports && cp reports-server.log reports/server.log 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          # HTML report, JUnit, server log, and traces/screenshots of any failure.
+          path: |
+            ops/reports/
+            ops/test-results/
+          retention-days: 14
+          if-no-files-found: ignore

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { PageHead } from "@/components/page-head";
 import { Card, Empty, Pill } from "@/components/ui";
+import { formatDate, formatTime, isoDay, parseWallTime, startOfDay } from "@/lib/business-time";
 import { requireAccess } from "@/lib/guard";
 import { addDays, byDay, crew, listWeek, visibleTo, weekStart } from "@/lib/queries/schedule";
 
@@ -27,7 +28,9 @@ export default async function SchedulePage({
   const isAdmin = user.role === "ADMIN";
   const { week, who } = await searchParams;
 
-  const anchor = week ? new Date(week) : new Date();
+  // ?week=2026-09-14 is a business-calendar day; read it as noon there so the
+  // server's own zone cannot shift it into the day before.
+  const anchor = week ? parseWallTime(`${week}T12:00`) : new Date();
   const from = weekStart(Number.isNaN(anchor.getTime()) ? new Date() : anchor);
 
   // An employee's filter is not a preference — it is the limit of what they see.
@@ -36,12 +39,11 @@ export default async function SchedulePage({
   const [events, people] = await Promise.all([listWeek(from, filterId), isAdmin ? crew() : Promise.resolve([])]);
   const days = byDay(events, from);
 
-  const prev = addDays(from, -7).toISOString().slice(0, 10);
-  const next = addDays(from, 7).toISOString().slice(0, 10);
+  const prev = isoDay(addDays(from, -7));
+  const next = isoDay(addDays(from, 7));
   const qs = (w: string, p?: string) => `/schedule?week=${w}${p ? `&who=${p}` : ""}`;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = startOfDay(new Date());
 
   return (
     <>
@@ -66,7 +68,7 @@ export default async function SchedulePage({
         </div>
         <div className="text-sm text-ink-2">
           Week of{" "}
-          <b>{from.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}</b>
+          <b>{formatDate(from, { day: "numeric", month: "long", year: "numeric" })}</b>
           {" · "}
           <span className="tabular-nums">{events.length}</span> booked
         </div>
@@ -113,7 +115,7 @@ export default async function SchedulePage({
                       {DAY_NAMES[i]}
                     </div>
                     <div className="text-sm font-semibold tabular-nums">
-                      {date.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
+                      {formatDate(date, { day: "numeric", month: "short" })}
                     </div>
                   </div>
 
@@ -127,7 +129,7 @@ export default async function SchedulePage({
                         <Card key={e.id} className="p-3">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-xs font-bold tabular-nums">
-                              {e.startAt.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}
+                              {formatTime(e.startAt)}
                             </span>
                             <Pill tone={KIND_TONE[e.kind]}>{e.kind.toLowerCase()}</Pill>
                           </div>

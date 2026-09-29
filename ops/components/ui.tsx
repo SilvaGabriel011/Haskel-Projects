@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDate } from "@/lib/business-time";
 
 /** Status pill. Tone carries meaning, not decoration. */
 export function Pill({
@@ -118,5 +119,5 @@ export const dims = (w: number, l: number) => `${w.toLocaleString("en-AU")} × $
 export const sqm = (w: number, l: number) => `${((w / 1000) * (l / 1000)).toFixed(2)} m²`;
 
 export function when(d: Date): string {
-  return d.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+  return formatDate(d, { day: "numeric", month: "short", year: "numeric" });
 }
