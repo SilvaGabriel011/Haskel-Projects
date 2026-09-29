@@ -3,11 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AdvanceButton } from "@/components/advance-button";
+import { StockReserve } from "@/components/stock-reserve";
 import { Card, Empty, Pill, SectionTitle, dims, when } from "@/components/ui";
 import { requireAccess } from "@/lib/guard";
 import { LABOUR_RATE_CENTS, formatAud, marginCents, marginPct } from "@/lib/money";
 import { PIPELINE_LABEL, STAGES, STATUS_LABEL, nextStage } from "@/lib/pipeline";
 import { getOrderDetail } from "@/lib/queries/orders";
+import { availableStock, heldForOrder } from "@/lib/reservations";
 
 export const metadata: Metadata = { title: "Job" };
 
@@ -17,6 +19,9 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const order = await getOrderDetail(id, user.role);
   if (!order) notFound();
+
+  const closed = order.status === "COMPLETE" || order.status === "LOST";
+  const [held, available] = await Promise.all([heldForOrder(order.id), closed ? null : availableStock()]);
 
   const stages = STAGES[order.pipeline];
   const reached = stages.indexOf(order.status);
@@ -148,6 +153,15 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               ))}
             </Card>
           )}
+
+          {available ? (
+            <div className="mt-8">
+              <SectionTitle>Held for this job</SectionTitle>
+              <Card className="p-5">
+                <StockReserve orderId={order.id} held={held} available={available} />
+              </Card>
+            </div>
+          ) : null}
 
           <div className="mt-8">
             <SectionTitle>Stock movement</SectionTitle>

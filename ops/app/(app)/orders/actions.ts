@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/guard";
 import { canTransition, requiresAdmin } from "@/lib/pipeline";
+import { releaseStock, reserveStock, type StockKind } from "@/lib/reservations";
 import type { OrderStatus } from "@prisma/client";
 
 /**
@@ -43,4 +44,31 @@ export async function advanceOrder(orderId: string, to: OrderStatus) {
   revalidatePath("/orders");
   revalidatePath(`/orders/${orderId}`);
   return { ok: true as const };
+}
+
+/**
+ * Hold a slab or offcut for this job, or give it back.
+ *
+ * Any signed-in user may: installers pull stock for the jobs they cut. The
+ * refusal when someone else got there first, and which job has it, come from
+ * lib/reservations.ts.
+ */
+export async function reserveForOrder(orderId: string, kind: StockKind, itemId: string) {
+  const user = await requireUser();
+  const res = await reserveStock({ kind, itemId, orderId, userId: user.id });
+  if (res.ok) revalidateStock(orderId);
+  return res;
+}
+
+export async function releaseFromOrder(orderId: string, kind: StockKind, itemId: string) {
+  const user = await requireUser();
+  const res = await releaseStock({ kind, itemId, orderId, userId: user.id });
+  if (res.ok) revalidateStock(orderId);
+  return res;
+}
+
+function revalidateStock(orderId: string) {
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/stock");
+  revalidatePath("/offcuts");
 }

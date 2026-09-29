@@ -6,6 +6,9 @@ import { useState, useTransition } from "react";
 import { acceptBooking, declineBooking } from "@/app/(app)/bookings/actions";
 import { Pill } from "@/components/ui";
 
+type Clash = { eventId: string; kind: string; startAt: Date; endAt: Date; jobNumber: string | null; people: string[] };
+type Twin = { id: string; status: string; createdAt: Date; preferredAt: Date };
+
 type Req = {
   id: string;
   name: string;
@@ -19,19 +22,61 @@ type Req = {
   createdAt: Date;
 };
 
+const hhmm = (d: Date) => d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" });
+const clashLine = (c: Clash) =>
+  `${c.jobNumber ?? "Internal"} · ${c.kind.toLowerCase()} ${hhmm(c.startAt)} to ${hhmm(c.endAt)}`;
+
 const when = (d: Date) =>
   d.toLocaleString("en-AU", {
     weekday: "short", day: "numeric", month: "short",
     hour: "numeric", minute: "2-digit",
   });
 
-export function BookingRow({ req, label }: { req: Req; label: string }) {
+export function BookingRow({
+  req,
+  label,
+  clashes,
+  duplicates,
+}: {
+  req: Req;
+  label: string;
+  clashes: { preferred: Clash[]; alternate: Clash[] };
+  duplicates: Twin[];
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [useAlternate, setUseAlternate] = useState(false);
 
+  // Set when the server says this time clashes; accepting again confirms.
+  const [confirm, setConfirm] = useState<Clash[] | null>(null);
+
   const chosen = useAlternate && req.alternateAt ? req.alternateAt : req.preferredAt;
+  const chosenClashes = useAlternate ? clashes.alternate : clashes.preferred;
+
+  const accept = (confirmConflicts: boolean) =>
+    start(async () => {
+      setMsg(null);
+      const res = await acceptBooking(req.id, chosen.toISOString(), confirmConflicts);
+      if (!res.ok) {
+        if (res.needsConfirmation) {
+          setConfirm(res.conflicts);
+          return;
+        }
+        setConfirm(null);
+        setMsg({ tone: "bad", text: res.reason });
+        return;
+      }
+      // Accepting removes this row from the pending list, which unmounts
+      // this component, so the confirmation cannot live here. Put it in
+      // the URL and let the page show it.
+      const q = new URLSearchParams({
+        accepted: res.jobNumber,
+        at: chosen.toISOString(),
+        calendar: res.calendar,
+      });
+      router.replace(`/bookings?${q}`);
+    });
 
   return (
     <div className="p-5">
@@ -40,12 +85,21 @@ export function BookingRow({ req, label }: { req: Req; label: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{req.name}</span>
             <Pill tone="good">{label}</Pill>
+            {chosenClashes.length ? <Pill tone="busy">clashes with your diary</Pill> : null}
+            {duplicates.length ? <Pill tone="busy">possible duplicate</Pill> : null}
           </div>
           <div className="mt-1 text-sm text-ink-2">
             {req.phone}
             {req.email ? ` · ${req.email}` : ""} · {req.suburb}
           </div>
           {req.notes ? <p className="mt-2 max-w-xl text-sm">{req.notes}</p> : null}
+          {duplicates.length ? (
+            <p className="mt-2 max-w-xl text-xs text-ink-2">
+              Same phone as {duplicates.length === 1 ? "another request" : `${duplicates.length} other requests`} in
+              the last 30 days:{" "}
+              {duplicates.map((d) => `${d.status.toLowerCase()}, asked ${when(d.createdAt)}`).join("; ")}.
+            </p>
+          ) : null}
         </div>
 
         <div className="text-right text-sm">
@@ -53,7 +107,10 @@ export function BookingRow({ req, label }: { req: Req; label: string }) {
           {req.alternateAt ? (
             <button
               type="button"
-              onClick={() => setUseAlternate((v) => !v)}
+              onClick={() => {
+                setUseAlternate((v) => !v);
+                setConfirm(null);
+              }}
               className={`mt-1 block text-xs underline-offset-4 hover:underline ${
                 useAlternate ? "font-semibold text-rose" : "text-ink-2"
               }`}
@@ -69,25 +126,7 @@ export function BookingRow({ req, label }: { req: Req; label: string }) {
         <button
           type="button"
           disabled={pending}
-          onClick={() =>
-            start(async () => {
-              setMsg(null);
-              const res = await acceptBooking(req.id, chosen.toISOString());
-              if (!res.ok) {
-                setMsg({ tone: "bad", text: res.reason });
-                return;
-              }
-              // Accepting removes this row from the pending list, which unmounts
-              // this component — so the confirmation cannot live here. Put it in
-              // the URL and let the page show it.
-              const q = new URLSearchParams({
-                accepted: res.jobNumber,
-                at: chosen.toISOString(),
-                calendar: res.calendar,
-              });
-              router.replace(`/bookings?${q}`);
-            })
-          }
+          onClick={() => accept(false)}
           className="rounded-full bg-rose px-5 py-2 text-xs font-semibold text-white transition hover:bg-rose-deep disabled:opacity-60"
         >
           {pending ? "Working…" : `Accept ${when(chosen)}`}
@@ -115,6 +154,38 @@ export function BookingRow({ req, label }: { req: Req; label: string }) {
           Ring them
         </a>
       </div>
+
+      {confirm ? (
+        <div role="alert" className="mt-4 rounded-[18px] border border-rose bg-blush px-5 py-4 text-sm">
+          <b>{when(chosen)} clashes with your diary:</b>
+          <ul className="mt-2 list-disc pl-5 text-xs">
+            {confirm.map((c) => (
+              <li key={c.eventId}>
+                {clashLine(c)}
+                {c.people.length ? ` · ${c.people.join(", ")}` : ""}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => accept(true)}
+              className="rounded-full bg-rose px-5 py-2 text-xs font-semibold text-white transition hover:bg-rose-deep disabled:opacity-60"
+            >
+              {pending ? "Working…" : "Book it anyway"}
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => setConfirm(null)}
+              className="rounded-full border border-line bg-white px-5 py-2 text-xs font-semibold text-ink-2 transition hover:border-rose hover:text-rose"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {msg ? (
         <p

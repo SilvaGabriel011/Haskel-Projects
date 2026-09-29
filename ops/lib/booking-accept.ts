@@ -1,0 +1,154 @@
+/**
+ * Turning a booking request into a job.
+ *
+ * Kept out of the server action so it can be tested without a session: the
+ * action adds the admin check, the calendar write and page revalidation.
+ *
+ * Two races this closes, both of which used to be possible:
+ *
+ *  1. Accepting the same request twice. The status used to be read, and only
+ *     later written, so a double click or two open tabs both saw NEW and both
+ *     created a customer, a job and a diary entry. Now the claim IS the check:
+ *     "set ACCEPTED where still NEW" inside the transaction, and whoever gets
+ *     zero rows back lost and changes nothing.
+ *  2. Two accepts at once computing the same job number from a count. The
+ *     unique index catches it; we retry with the next number instead of
+ *     showing a database error.
+ */
+import { Prisma, type BookingRequest } from "@prisma/client";
+
+import { db } from "@/lib/db";
+import { findTimeConflicts, type TimeConflict } from "@/lib/conflicts";
+
+export const MEASURE_MINUTES = 60;
+
+export type AcceptResult =
+  | { ok: true; orderId: string; jobNumber: string; eventId: string; startAt: Date; endAt: Date; request: BookingRequest }
+  | { ok: false; reason: string; needsConfirmation?: never; conflicts?: never }
+  | { ok: false; reason: string; needsConfirmation: true; conflicts: TimeConflict[] };
+
+class AlreadyDecided extends Error {}
+
+function jobNumberFor(now: Date, n: number) {
+  const yy = now.getFullYear().toString().slice(2);
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  return `HP-${yy}${mm}-B${String(n).padStart(3, "0")}`;
+}
+
+const isJobNumberClash = (e: unknown) =>
+  e instanceof Prisma.PrismaClientKnownRequestError &&
+  e.code === "P2002" &&
+  JSON.stringify(e.meta ?? {}).includes("jobNumber");
+
+export async function acceptBookingRequest(input: {
+  id: string;
+  userId: string;
+  at?: string;
+  /** Set once the admin has seen the clashes and chosen to book anyway. */
+  confirmConflicts?: boolean;
+  now?: Date;
+}): Promise<AcceptResult> {
+  const req = await db.bookingRequest.findUnique({ where: { id: input.id } });
+  if (!req) return { ok: false, reason: "That request no longer exists." };
+  if (req.status !== "NEW") return { ok: false, reason: `Already ${req.status.toLowerCase()}.` };
+
+  const startAt = input.at ? new Date(input.at) : req.preferredAt;
+  if (Number.isNaN(startAt.getTime())) return { ok: false, reason: "That time did not parse." };
+  const endAt = new Date(startAt.getTime() + MEASURE_MINUTES * 60 * 1000);
+
+  // Warn before writing anything. The admin is the one being booked.
+  if (!input.confirmConflicts) {
+    const conflicts = await findTimeConflicts(startAt, endAt, [input.userId]);
+    if (conflicts.length) {
+      return {
+        ok: false,
+        needsConfirmation: true,
+        conflicts,
+        reason: `This clashes with ${conflicts.length === 1 ? "a job" : `${conflicts.length} jobs`} already in your diary.`,
+      };
+    }
+  }
+
+  const now = input.now ?? new Date();
+  const base = (await db.bookingRequest.count({ where: { status: "ACCEPTED" } })) + 1;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const jobNumber = jobNumberFor(now, base + attempt);
+    try {
+      const { order, event } = await db.$transaction(async (tx) => {
+        // The claim. Only one caller can move this row off NEW.
+        const claimed = await tx.bookingRequest.updateMany({
+          where: { id: req.id, status: "NEW" },
+          data: { status: "ACCEPTED", decidedAt: now },
+        });
+        if (claimed.count === 0) throw new AlreadyDecided();
+
+        // Match an existing customer on phone before making a duplicate.
+        const customer =
+          (await tx.customer.findFirst({ where: { phone: req.phone } })) ??
+          (await tx.customer.create({
+            data: { name: req.name, phone: req.phone, email: req.email, suburb: req.suburb, source: "WEBSITE" },
+          }));
+
+        const order = await tx.order.create({
+          data: {
+            jobNumber,
+            customerId: customer.id,
+            // A measure is the front of the short pipeline; it moves to FULL
+            // later if it turns out to be a benchtop install.
+            pipeline: "SHORT",
+            jobType: req.jobType,
+            status: "ENQUIRY",
+            address: "To confirm on the call",
+            suburb: req.suburb,
+            notes: req.notes,
+          },
+        });
+
+        const event = await tx.scheduleEvent.create({
+          data: {
+            orderId: order.id,
+            kind: "TEMPLATE",
+            startAt,
+            endAt,
+            address: `${req.suburb}, address to confirm`,
+            notes: `From a website booking request. ${req.notes ?? ""}`.trim(),
+          },
+        });
+        await tx.scheduleAssignee.create({ data: { eventId: event.id, userId: input.userId } });
+        await tx.bookingRequest.update({ where: { id: req.id }, data: { orderId: order.id } });
+
+        return { order, event };
+      });
+
+      return {
+        ok: true,
+        orderId: order.id,
+        jobNumber: order.jobNumber,
+        eventId: event.id,
+        startAt,
+        endAt,
+        request: req,
+      };
+    } catch (e) {
+      if (e instanceof AlreadyDecided) {
+        const now2 = await db.bookingRequest.findUnique({ where: { id: req.id }, select: { status: true } });
+        return { ok: false, reason: `Already ${(now2?.status ?? "decided").toLowerCase()}.` };
+      }
+      if (isJobNumberClash(e)) continue; // someone took that number a moment ago
+      throw e;
+    }
+  }
+  return { ok: false, reason: "Could not allocate a job number. Try again." };
+}
+
+/** Same claim pattern for declining: only a request still NEW can be declined. */
+export async function declineBookingRequest(id: string, note?: string) {
+  const res = await db.bookingRequest.updateMany({
+    where: { id, status: "NEW" },
+    data: { status: "DECLINED", decidedAt: new Date(), declineNote: note?.slice(0, 500) || null },
+  });
+  if (res.count === 1) return { ok: true as const };
+  const req = await db.bookingRequest.findUnique({ where: { id }, select: { status: true } });
+  return { ok: false as const, reason: req ? `Already ${req.status.toLowerCase()}.` : "That request no longer exists." };
+}
