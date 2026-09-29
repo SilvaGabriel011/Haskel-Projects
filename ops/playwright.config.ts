@@ -15,10 +15,15 @@ export default defineConfig({
   fullyParallel: false, // they share one seeded database
   forbidOnly: !!process.env.CI,
   retries: 0,
-  reporter: process.env.CI ? "github" : "list",
+  // In CI: annotations on the run, a browsable HTML report and JUnit for the
+  // run summary. Both files are uploaded as artifacts by the workflow.
+  reporter: process.env.CI
+    ? [["github"], ["html", { open: "never", outputFolder: "reports/e2e-html" }], ["junit", { outputFile: "reports/e2e-junit.xml" }]]
+    : "list",
   timeout: 45_000,
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3111",
     trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
 });

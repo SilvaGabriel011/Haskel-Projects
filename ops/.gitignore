@@ -12,5 +12,6 @@ next-env.d.ts
 
 # Playwright
 test-results
+/reports
 playwright-report
 blob-report
