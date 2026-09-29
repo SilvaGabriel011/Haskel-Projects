@@ -19,6 +19,7 @@ import {
 } from "@prisma/client";
 
 import { hashPassword } from "../lib/password";
+import { zonedParts, zonedTime } from "../lib/business-time";
 
 // ---- deterministic randomness (mulberry32) -------------------------------
 let _s = 0x9e3779b9;
@@ -300,8 +301,11 @@ async function main() {
     const kinds: EventKind[] = o.pipeline === "FULL" ? ["TEMPLATE", "INSTALL"] : ["INSTALL"];
     for (const kind of kinds) {
       const base = o.wonAt ?? o.createdAt;
-      const start = new Date(base.getTime() + int(2, 25) * 86_400_000);
-      start.setUTCHours(int(7, 13), chance(0.5) ? 0 : 30, 0, 0);
+      // A working day in the business's own zone, not the server's. Setting
+      // UTC hours here put every demo job between 5:30pm and 11:30pm once
+      // BUSINESS_TIMEZONE was honoured on the screens.
+      const day = zonedParts(new Date(base.getTime() + int(2, 25) * 86_400_000));
+      const start = zonedTime(day.year, day.month, day.day, int(7, 15), chance(0.5) ? 0 : 30);
       const ev = await db.scheduleEvent.create({
         data: {
           orderId: o.id, kind, startAt: start,

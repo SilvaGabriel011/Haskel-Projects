@@ -15,7 +15,7 @@
 import type { EventKind } from "@prisma/client";
 
 /**
- * The IANA zone the business works in (e.g. "Australia/Sydney"), from
+ * The IANA zone the business works in (e.g. "Australia/Adelaide"), from
  * BUSINESS_TIMEZONE. Never hardcode an offset: several Australian zones sit on
  * half hours and most observe DST. Unset or unrecognised means no sync, rather
  * than events landing in the diary at a guessed time.

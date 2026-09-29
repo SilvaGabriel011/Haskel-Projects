@@ -219,7 +219,7 @@ public site from `haskel-site/`.
 6. Copy the client ID and secret into `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`
 7. `GOOGLE_WORKSPACE_DOMAIN` is already set to `haskelproject.com.au`
 8. For calendar sync, also set `GOOGLE_CALENDAR_ID` (a throwaway calendar
-   first) and `BUSINESS_TIMEZONE` (an IANA zone such as `Australia/Perth`).
+   first) and `BUSINESS_TIMEZONE` (`Australia/Adelaide`).
    Sync stays off until both are set, rather than guessing a timezone.
 
 **In production, Google sign-in is refused until `GOOGLE_WORKSPACE_DOMAIN` is
