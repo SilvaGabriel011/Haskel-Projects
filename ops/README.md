@@ -24,6 +24,7 @@ The two deploy independently and neither can break the other.
 | 9 | Putting stock on the rack by hand | Done |
 | 10 | Follow-up board (overdue, missing detail) | Done |
 | 11 | Eleven stages and the stage timeline | Done |
+| 12 | Grouping jobs that are near each other | Done |
 
 Every screen now runs on real (seeded) data. No shells left.
 
@@ -69,6 +70,43 @@ genuinely sat over the weekend, and pretending otherwise flatters the numbers.
 The move and its history are written in one transaction. If closing the old
 spell and opening the new one could come apart, a job would be counted in two
 stages at once or in none, and every figure would be wrong from then on.
+
+## Jobs that are near each other
+
+The system stores a suburb as free text and an address as a free line — there
+are no coordinates anywhere. So "which jobs are close together" cannot be
+answered from the data as stored.
+
+`lib/suburbs.ts` is the smallest thing that answers it: a built-in table of
+Adelaide suburbs with one approximate centre point each. It ships with the app
+— **no API key, no cost per lookup, no network call and no failure mode.**
+
+Two places use it:
+
+- **The follow-up board** puts a line on a card: *"3 others within 5 km"*.
+- **The schedule** groups the week into runs above the grid, each one naming
+  its suburbs and how far apart the furthest two are.
+
+Things worth knowing:
+
+- **A suburb it does not recognise is not an error.** That job shows everywhere
+  as normal and simply never groups. The schedule says how many were left out
+  rather than quietly dropping them.
+- **It reads what people actually type.** `Prospect`, `prospect`,
+  `Prospect SA`, `Prospect, SA 5082` all reach the same place. Without that,
+  grouping silently stops working on real data and looks like a broken feature.
+- **Runs count visits, not jobs.** A job with a template on Tuesday and an
+  install on Wednesday is two separate trips, so it appears twice — the label
+  says `3 visits · 2 jobs` rather than pretending it is three customers.
+- **It does not suggest a driving order.** That would look precise while being
+  guesswork: the table places a suburb, not a house, and the difference between
+  two addresses in one suburb is exactly what it cannot see. Grouping is the
+  honest limit of this data.
+- **Adding a suburb is adding a row** to `SUBURBS`. A centroid being slightly
+  off only changes whether two jobs group; it cannot make any other figure in
+  the system wrong.
+
+Both roles see this — where jobs are is not money.
 
 ## The follow-up board
 
@@ -179,7 +217,7 @@ npm run dev           # http://localhost:3000
 ```bash
 npm run typecheck     # tsc, no emit
 npm run lint
-npm test              # 188 unit tests — query layer, pipeline rules, seed integrity, input rules
+npm test              # 222 unit tests — query layer, pipeline rules, seed integrity, input rules
 npm run build         # full production build
 ```
 
@@ -329,6 +367,8 @@ ops/
 │   ├── stock-input.ts what may go on the rack — pure rules, unit tested
 │   ├── board.ts       follow-up thresholds and missing-detail rules
 │   ├── stage-timing.ts   how long each stage took, and where the time went
+│   ├── suburbs.ts     Adelaide suburb centroids, and reading a typed suburb
+│   ├── routes.ts      grouping jobs that are near each other
 │   ├── business-time.ts  days, weeks and months in the business's zone
 │   ├── queries/       role-aware reads — the money never leaves the server
 │   └── google-calendar.ts  booking → calendar event (sync pending credentials)

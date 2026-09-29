@@ -35,6 +35,9 @@ const EVENT_SELECT = {
   order: {
     select: {
       id: true, jobNumber: true, jobType: true, pipeline: true,
+      // Where the job is, so lib/routes can group a week into runs. Not money,
+      // so both roles read it.
+      suburb: true,
       customer: { select: { name: true, phone: true } },
     },
   },

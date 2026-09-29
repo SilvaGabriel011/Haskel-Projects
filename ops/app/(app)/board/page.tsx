@@ -16,6 +16,7 @@ import {
   type Tone,
 } from "@/lib/board";
 import { requireAccess } from "@/lib/guard";
+import { DEFAULT_RADIUS_KM, nearbyJobs } from "@/lib/routes";
 import { PIPELINE_LABEL, STATUS_LABEL } from "@/lib/pipeline";
 import { boardCards } from "@/lib/queries/board";
 
@@ -40,7 +41,7 @@ const TONE_PILL: Record<Tone, "good" | "warn" | "gone"> = {
   late: "gone",
 };
 
-function JobCard({ card }: { card: BoardCard }) {
+function JobCard({ card, nearby }: { card: BoardCard; nearby: number }) {
   return (
     <Link
       href={`/orders/${card.id}`}
@@ -56,6 +57,11 @@ function JobCard({ card }: { card: BoardCard }) {
 
       <div className="mt-2 text-sm font-semibold">{card.customerName}</div>
       {card.suburb ? <div className="mt-0.5 text-xs text-ink-2">{card.suburb}</div> : null}
+      {nearby > 0 ? (
+        <div className="mt-1 text-xs text-rose">
+          {nearby} other{nearby === 1 ? "" : "s"} within {DEFAULT_RADIUS_KM} km
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {/* The screen reader gets the state in words; the colour is a shortcut
@@ -113,6 +119,13 @@ export default async function BoardPage({
   const missing = all.filter((c) => c.gaps.length > 0).length;
   const blocked = all.filter((c) => c.gaps.some((g) => g.blocking)).length;
   const passed = all.filter((c) => c.datePassed).length;
+
+  // How many other live jobs sit near each one. Computed over every job still
+  // in flight, not just the filtered view: "2 others nearby" must not change
+  // because a filter is on.
+  const nearbyCount = new Map<string, number>(
+    all.map((c) => [c.id, nearbyJobs(c, all).length]),
+  );
 
   const stages = columnsFor();
 
@@ -199,7 +212,7 @@ export default async function BoardPage({
                         Nothing here
                       </div>
                     ) : (
-                      items.map((c) => <JobCard key={c.id} card={c} />)
+                      items.map((c) => <JobCard key={c.id} card={c} nearby={nearbyCount.get(c.id) ?? 0} />)
                     )}
                   </div>
                 </section>
