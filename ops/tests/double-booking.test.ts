@@ -146,7 +146,7 @@ describe("holding stock", () => {
     assert.ok(offcut, "seed must contain an available offcut");
     offcutId = offcut.id;
     const open = await db.order.findMany({
-      where: { status: { notIn: ["COMPLETE", "LOST"] } },
+      where: { status: { notIn: ["INVOICE", "LOST"] } },
       select: { id: true },
       take: 2,
     });
@@ -201,7 +201,7 @@ describe("holding stock", () => {
   });
 
   it("a closed job cannot hold stock", async () => {
-    const closed = await db.order.findFirst({ where: { status: "COMPLETE" }, select: { id: true } });
+    const closed = await db.order.findFirst({ where: { status: "INVOICE" }, select: { id: true } });
     assert.ok(closed);
     const res = await reserveStock({ kind: "offcut", itemId: offcutId, orderId: closed.id, userId: adminId });
     assert.equal(res.ok, false);

@@ -114,7 +114,7 @@ export default async function BoardPage({
   const blocked = all.filter((c) => c.gaps.some((g) => g.blocking)).length;
   const passed = all.filter((c) => c.datePassed).length;
 
-  const stages = columnsFor(pipeline);
+  const stages = columnsFor();
 
   const byStage = new Map<string, BoardCard[]>(stages.map((s) => [s, []]));
   for (const c of cards) byStage.get(c.status)?.push(c);

@@ -23,8 +23,52 @@ The two deploy independently and neither can break the other.
 | 8b | Calendar sync on accept | **Wired, waiting on credentials** |
 | 9 | Putting stock on the rack by hand | Done |
 | 10 | Follow-up board (overdue, missing detail) | Done |
+| 11 | Eleven stages and the stage timeline | Done |
 
 Every screen now runs on real (seeded) data. No shells left.
+
+## The eleven stages
+
+Every job runs the same eleven stages, taken verbatim from the Tekton flow so
+the two systems line up:
+
+**Initial Stage → Quote Request → Quoted → Order Active → Purchase Order →
+Measured → Details → Factory → Ready For Dispatch → Installation → Invoice**
+
+Plus `LOST`, which is not a stage: a job abandoned before the order went active.
+
+This replaced a two-pipeline design — a short run for offcut work, a long one
+for benchtop installs. One flow for everything makes every job's timings
+comparable and keeps the stages the same across projects, which is the point.
+The cost, accepted deliberately: an offcut vanity top still passes through
+Purchase Order and Factory, which on small work are often a few minutes each.
+
+`pipeline` survives on the order as a **classification**, not a stage list —
+the financials still split revenue between offcut/small work and benchtop
+installs.
+
+Quoting, activating the order, raising the purchase order, invoicing and
+writing a job off stay with the office. An installer moves work along the
+bench: measured, details, factory, out the door, installed.
+
+## The stage timeline
+
+Every move writes an `OrderStage` row — which stage, when it was entered, when
+it was left, and who moved it. The row with no exit time is where the job is
+now. **Status alone says where a job is, never how long it has been there**,
+which is the question both the timeline and the follow-up board exist to answer.
+
+On a job you get: total job time, the current stage with how long it has been
+running, the longest stage, how many of the eleven are done, then the numbered
+track — hours and days in each stage, in and out times, who moved it — and a
+bar showing where the time actually went.
+
+Hours are **calendar time, not working time**. A job sitting over a weekend has
+genuinely sat over the weekend, and pretending otherwise flatters the numbers.
+
+The move and its history are written in one transaction. If closing the old
+spell and opening the new one could come apart, a job would be counted in two
+stages at once or in none, and every figure would be wrong from then on.
 
 ## The follow-up board
 
@@ -33,10 +77,9 @@ question of **what is going wrong**, and is the screen to open each morning.
 
 Every job still in flight gets a card, coloured by the worse of two signals:
 
-- **How long it has sat**, against a threshold that differs per stage. An
-  enquiry goes amber after two days and red after four; fabrication after ten
-  and eighteen. One number for every stage would either nag about fabrication
-  or miss dead leads.
+- **How long it has sat in its current stage**, read from the stage history:
+  **over three days is amber, over five is red**. One pair of numbers everyone
+  knows, shared with the timeline so the two can never disagree.
 - **What the office is missing.** No phone number, no site address on a won
   job, nothing on the cut list — each card lists the gaps in words. Blocking
   gaps (the job cannot proceed) are red; the rest are amber.
@@ -136,7 +179,7 @@ npm run dev           # http://localhost:3000
 ```bash
 npm run typecheck     # tsc, no emit
 npm run lint
-npm test              # 170 unit tests — query layer, pipeline rules, seed integrity, input rules
+npm test              # 188 unit tests — query layer, pipeline rules, seed integrity, input rules
 npm run build         # full production build
 ```
 
@@ -285,6 +328,7 @@ ops/
 │   ├── pipeline.ts    the two pipelines, legal transitions, shared phase mapping
 │   ├── stock-input.ts what may go on the rack — pure rules, unit tested
 │   ├── board.ts       follow-up thresholds and missing-detail rules
+│   ├── stage-timing.ts   how long each stage took, and where the time went
 │   ├── business-time.ts  days, weeks and months in the business's zone
 │   ├── queries/       role-aware reads — the money never leaves the server
 │   └── google-calendar.ts  booking → calendar event (sync pending credentials)

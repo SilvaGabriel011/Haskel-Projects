@@ -16,6 +16,7 @@
 import type { Prisma, Role } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { FINAL_STAGE } from "@/lib/pipeline";
 
 /** Columns every role may see. */
 const SHARED_ORDER_SELECT = {
@@ -88,7 +89,7 @@ export async function listOrders<R extends Role>(
  */
 export async function revenueByMonth(from: Date) {
   return db.order.findMany({
-    where: { status: "COMPLETE", completedAt: { gte: from } },
+    where: { status: FINAL_STAGE, completedAt: { gte: from } },
     select: {
       completedAt: true,
       pipeline: true,
@@ -193,4 +194,29 @@ export async function getOrderDetail<R extends Role>(
       ? await db.order.findUnique({ where: { id }, select: DETAIL_ADMIN })
       : await db.order.findUnique({ where: { id }, select: DETAIL_EMPLOYEE });
   return row as OrderDetailForRole<R> | null;
+}
+
+// ------------------------------------------------------------ stage timeline
+
+/**
+ * Every spell this job has spent in a stage, oldest first.
+ *
+ * Separate from getOrderDetail rather than nested in it: the timeline is one
+ * panel on one page, and there is no reason for every other reader of an order
+ * to carry eleven extra rows.
+ *
+ * No role split — how long a job sat in Factory is not money, and an installer
+ * has as much reason to know it as the office.
+ */
+export async function stageHistory(orderId: string) {
+  return db.orderStage.findMany({
+    where: { orderId },
+    orderBy: { enteredAt: "asc" },
+    select: {
+      stage: true,
+      enteredAt: true,
+      exitedAt: true,
+      movedBy: { select: { name: true } },
+    },
+  });
 }

@@ -2,20 +2,16 @@
  * The follow-up board: which jobs need chasing, and why.
  *
  * `/orders` answers "where is everything". This answers the different question
- * of "what is going wrong" — a job sitting too long in one stage, an install
+ * of "what is going wrong" — a job sitting too long in its stage, an install
  * date that has passed, or a customer record too thin to actually do the work.
  *
  * Pure and free of the database, like lib/pipeline.ts, so the thresholds and
  * the traffic lights are unit tested rather than only eyeballed on screen.
- *
- * Days are counted in the business's zone via lib/business-time, never by
- * dividing milliseconds: across a daylight saving change a "day" is 23 or 25
- * hours, and a job should not go amber an hour early in October.
  */
 import type { OrderStatus, Pipeline } from "@prisma/client";
 
-import { daysBetween } from "@/lib/business-time";
-import { STAGES, phase } from "@/lib/pipeline";
+import { FINAL_STAGE, STAGES, phase } from "@/lib/pipeline";
+import { OVER_3_DAYS_MS, OVER_5_DAYS_MS } from "@/lib/stage-timing";
 
 /** Green, amber, red. Ordered, so the worst of several is just a max. */
 export const TONES = ["ok", "warn", "late"] as const;
@@ -28,37 +24,28 @@ export function worst(...tones: Tone[]): Tone {
 }
 
 export const TONE_LABEL: Record<Tone, string> = {
-  ok: "On track",
-  warn: "Getting on",
-  late: "Overdue",
+  ok: "Within target",
+  warn: "Over 3 days",
+  late: "Over 5 days",
 };
 
 /**
- * How many days a job may sit in a stage before it is worth a look, then
- * before it is late.
+ * One pair of thresholds for every stage: over three days is amber, over five
+ * is red. Shared with the stage timeline rather than restated, so the board and
+ * the timeline can never disagree about whether a job is late.
  *
- * Per stage, because the stages are not alike: an enquiry left three days is
- * a lost customer, while fabrication legitimately takes a fortnight. These are
- * a starting point — they are the numbers most likely to want tuning once the
- * business has watched the board for a month.
+ * These used to differ per stage, on the reasoning that fabrication legitimately
+ * takes longer than an enquiry. Flat is what the business actually runs, and one
+ * number everybody knows beats a table nobody remembers.
  */
-export const STAGE_DAYS: Record<OrderStatus, { warn: number; late: number }> = {
-  ENQUIRY: { warn: 2, late: 4 },
-  QUOTED: { warn: 5, late: 10 },
-  WON: { warn: 5, late: 10 },
-  CUTTING: { warn: 4, late: 8 },
-  TEMPLATED: { warn: 7, late: 14 },
-  FABRICATING: { warn: 10, late: 18 },
-  SCHEDULED: { warn: 10, late: 21 },
-  INSTALLED: { warn: 3, late: 7 },
-  COMPLETE: { warn: Infinity, late: Infinity },
-  LOST: { warn: Infinity, late: Infinity },
-};
+export const WARN_DAYS = OVER_3_DAYS_MS / 86_400_000;
+export const LATE_DAYS = OVER_5_DAYS_MS / 86_400_000;
 
 export function ageTone(status: OrderStatus, days: number): Tone {
-  const t = STAGE_DAYS[status];
-  if (days >= t.late) return "late";
-  if (days >= t.warn) return "warn";
+  // A finished or abandoned job is never chased.
+  if (status === FINAL_STAGE || status === "LOST") return "ok";
+  if (days >= LATE_DAYS) return "late";
+  if (days >= WARN_DAYS) return "warn";
   return "ok";
 }
 
@@ -98,21 +85,30 @@ export type JobForGaps = {
   customer: { name: string | null; phone: string | null; email: string | null };
 };
 
+/** Stages at which a site address and a cut list are genuinely expected. */
+const NEEDS_SITE_DETAIL: readonly OrderStatus[] = [
+  "MEASURED",
+  "DETAILS",
+  "FACTORY",
+  "READY_FOR_DISPATCH",
+  "INSTALLATION",
+];
+
 /**
  * What is missing, in the order someone would chase it.
  *
- * Which gaps count depends on the stage: a fresh enquiry is allowed to have no
- * address and no quote, but a job that has been won and is not yet complete
- * needs both. Flagging an enquiry for having no cut list would make the board
- * cry wolf, and a board that cries wolf gets ignored.
+ * Which gaps count depends on the stage: a job at Initial or Quote Request is
+ * allowed to have no address and no cut list, but one heading for the factory
+ * needs both. Flagging an early enquiry for having no cut list would make the
+ * board cry wolf, and a board that cries wolf gets ignored.
  */
 export function gapsFor(job: JobForGaps): Gap[] {
   const gaps: Gap[] = [];
   const p = phase(job.status);
-  const settled = p === "COMPLETE" || p === "LOST";
-  if (settled) return gaps;
+  if (p === "COMPLETE" || p === "LOST") return gaps;
 
   const won = p === "WON";
+  const onSite = NEEDS_SITE_DETAIL.includes(job.status);
 
   if (blank(job.customer.name)) {
     gaps.push({ field: "name", label: "No customer name", blocking: true });
@@ -127,16 +123,16 @@ export function gapsFor(job: JobForGaps): Gap[] {
     gaps.push({ field: "suburb", label: "No suburb", blocking: won });
   }
   if (blank(job.address)) {
-    // Only blocking once the job is won: before that there may genuinely be no
-    // address yet, and the placeholder acceptBooking writes is honest.
+    // Only blocking once the order is active: before that there may genuinely
+    // be no address, and the placeholder acceptBooking writes is honest.
     gaps.push({ field: "address", label: "No site address", blocking: won });
   }
-  if (won && job.lineCount === 0) {
+  if (onSite && job.lineCount === 0) {
     gaps.push({ field: "lines", label: "Nothing on the cut list", blocking: true });
   }
   // Undefined means an employee is looking and money was never read. Absent is
   // not zero, and an employee must not be shown a money gap they cannot fix.
-  if (job.quoteCents !== undefined && job.quoteCents <= 0 && job.status !== "ENQUIRY") {
+  if (job.quoteCents !== undefined && job.quoteCents <= 0 && job.status !== "INITIAL") {
     gaps.push({ field: "quote", label: "Not quoted", blocking: won });
   }
 
@@ -157,7 +153,12 @@ export type JobForBoard = JobForGaps & {
   createdAt: Date;
   wonAt: Date | null;
   completedAt: Date | null;
-  /** Soonest booked event still ahead, and the last one behind. */
+  /**
+   * When the job entered the stage it is in now, from its open OrderStage row.
+   * Null only for a job with no history at all, which falls back to createdAt.
+   */
+  stageEnteredAt: Date | null;
+  /** Soonest booked event, to spot a date that has come and gone. */
   nextEventAt: Date | null;
 };
 
@@ -174,34 +175,35 @@ export type BoardCard = {
   gapTone: Tone;
   /** A booked date that has come and gone with the job unfinished. */
   datePassed: boolean;
-  /** The worse of the two signals. What the card's edge is coloured by. */
+  /** The worse of the signals. What the card's edge is coloured by. */
   tone: Tone;
 };
 
 /**
- * When the job last moved.
+ * When the job entered its current stage.
  *
- * There is no per-stage history table, so this is the best timestamp available
- * for the stage it is in: `wonAt` once it is won, `createdAt` before that. It
- * therefore reads "days since it was won" for every post-win stage rather than
- * days in that exact stage — which is honest for chasing, and the alternative
- * is a status-history table that is not worth adding until asked for.
+ * Read from the stage history, which is the record. The fallback to createdAt
+ * covers a job written before the history table existed — it reads as "days
+ * since the job arrived", which is wrong but never wildly so, and it stops a
+ * card vanishing from the board because its history is missing.
  */
-export function stageSince(job: Pick<JobForBoard, "status" | "createdAt" | "wonAt">): Date {
-  const p = phase(job.status);
-  if ((p === "WON" || p === "COMPLETE") && job.wonAt) return job.wonAt;
-  return job.createdAt;
+export function stageSince(job: Pick<JobForBoard, "stageEnteredAt" | "createdAt">): Date {
+  return job.stageEnteredAt ?? job.createdAt;
 }
 
 export function toCard(job: JobForBoard, now = new Date()): BoardCard {
-  const settled = phase(job.status) === "COMPLETE" || phase(job.status) === "LOST";
-  const daysInStage = Math.max(0, daysBetween(stageSince(job), now));
-  const gaps = gapsFor(job);
+  const p = phase(job.status);
+  const settled = p === "COMPLETE" || p === "LOST";
 
+  // Whole days, floored: a job is not "1 day late" after 25 hours.
+  const ms = Math.max(0, now.getTime() - stageSince(job).getTime());
+  const daysInStage = Math.floor(ms / 86_400_000);
+
+  const gaps = gapsFor(job);
   const datePassed =
     !settled && job.nextEventAt !== null && job.nextEventAt.getTime() < now.getTime();
 
-  const age = settled ? "ok" : ageTone(job.status, daysInStage);
+  const age = ageTone(job.status, daysInStage);
   const gt = gapTone(gaps);
 
   return {
@@ -223,32 +225,15 @@ export function toCard(job: JobForBoard, now = new Date()): BoardCard {
 // ------------------------------------------------------------------ columns
 
 /**
- * The columns, in the order work actually progresses.
+ * The columns: every stage a job can still be sitting in.
  *
- * Not the union of both pipelines' stage lists: concatenating them puts
- * CUTTING — the short pipeline's only post-win stage — after INSTALLED, which
- * reads as though offcut jobs are cut last. Interleaved by hand instead,
- * because the two pipelines diverge after WON and rejoin at COMPLETE.
- *
- * COMPLETE and LOST are absent on purpose: this board is what still needs
- * doing, so those columns would always be empty.
+ * INVOICE is absent because a job that reaches it is finished, and LOST because
+ * it is not a stage. Both would only ever read zero here.
  */
-export const BOARD_STAGES: readonly OrderStatus[] = [
-  "ENQUIRY",
-  "QUOTED",
-  "WON",
-  "CUTTING",
-  "TEMPLATED",
-  "FABRICATING",
-  "SCHEDULED",
-  "INSTALLED",
-] as const;
+export const BOARD_STAGES: readonly OrderStatus[] = STAGES.filter((s) => s !== FINAL_STAGE);
 
-/** The columns to show, for one pipeline or for both. */
-export function columnsFor(pipeline?: Pipeline): readonly OrderStatus[] {
-  if (!pipeline) return BOARD_STAGES;
-  const inThis = new Set<OrderStatus>(STAGES[pipeline]);
-  return BOARD_STAGES.filter((s) => inThis.has(s));
+export function columnsFor(): readonly OrderStatus[] {
+  return BOARD_STAGES;
 }
 
 // ------------------------------------------------------------------ filters

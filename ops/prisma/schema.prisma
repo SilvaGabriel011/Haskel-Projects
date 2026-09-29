@@ -34,6 +34,7 @@ model User {
 
   movements StockMovement[]
   shifts    ScheduleAssignee[]
+  stageMoves OrderStage[]
 
   @@index([active])
 }
@@ -211,16 +212,21 @@ enum JobType {
 
 /// One enum for both pipelines. lib/pipeline.ts owns which stages are legal in
 /// which pipeline and maps them onto a coarse phase the financials group by.
+/// The eleven stages every job runs, in order, plus the one way out.
+/// Order here is the progression; lib/pipeline.ts owns the legal moves.
 enum OrderStatus {
-  ENQUIRY
+  INITIAL
+  QUOTE_REQUEST
   QUOTED
-  WON
-  CUTTING     // SHORT only
-  TEMPLATED   // FULL only
-  FABRICATING // FULL only
-  SCHEDULED   // FULL only
-  INSTALLED   // FULL only
-  COMPLETE
+  ORDER_ACTIVE
+  PURCHASE_ORDER
+  MEASURED
+  DETAILS
+  FACTORY
+  READY_FOR_DISPATCH
+  INSTALLATION
+  INVOICE
+  /// Not a stage: a job abandoned before it was won.
   LOST
 }
 
@@ -230,7 +236,7 @@ model Order {
   customerId    String
   pipeline      Pipeline
   jobType       JobType
-  status        OrderStatus @default(ENQUIRY)
+  status        OrderStatus @default(INITIAL)
   address       String
   suburb        String
   notes         String?
@@ -252,6 +258,7 @@ model Order {
   lines     OrderLine[]
   events    ScheduleEvent[]
   movements StockMovement[]
+  stages    OrderStage[]
 
   @@index([status])
   @@index([pipeline])
@@ -361,4 +368,25 @@ model ScheduleAssignee {
 
   @@id([eventId, userId])
   @@index([userId])
+}
+
+/// One spell in one stage: when the job entered it, when it left, and who moved
+/// it in. The open row (exitedAt null) is the stage the job is in now.
+///
+/// Time in stage cannot be derived without this — status alone says where a job
+/// is, never how long it has been there, and that is the whole question the
+/// follow-up board exists to answer.
+model OrderStage {
+  id        String      @id @default(cuid())
+  orderId   String
+  stage     OrderStatus
+  enteredAt DateTime    @default(now())
+  exitedAt  DateTime?
+  movedById String?
+
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  movedBy User? @relation(fields: [movedById], references: [id])
+
+  @@index([orderId, enteredAt])
+  @@index([stage])
 }

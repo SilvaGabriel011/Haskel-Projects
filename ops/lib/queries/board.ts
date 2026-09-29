@@ -14,6 +14,7 @@ import type { Prisma, Role } from "@prisma/client";
 
 import { toCard, type BoardCard, type JobForBoard } from "@/lib/board";
 import { db } from "@/lib/db";
+import { FINAL_STAGE } from "@/lib/pipeline";
 
 const SHARED = {
   id: true,
@@ -34,16 +35,17 @@ const SHARED = {
     orderBy: { startAt: "asc" },
     take: 1,
   },
+  // The open spell is the stage the job is in now, and when it got there.
+  // One row per order, so this stays a single query rather than one per card.
+  stages: {
+    where: { exitedAt: null },
+    select: { enteredAt: true },
+    take: 1,
+  },
 } satisfies Prisma.OrderSelect;
 
 const ADMIN = { ...SHARED, quoteCents: true } satisfies Prisma.OrderSelect;
 
-/**
- * Every job still in flight, as cards.
- *
- * COMPLETE and LOST are excluded: they are not followed up, and lib/board.ts
- * would score them "ok" anyway.
- */
 type SharedRow = Prisma.OrderGetPayload<{ select: typeof SHARED }>;
 
 /** The half of a card that does not depend on role. */
@@ -61,11 +63,18 @@ function base(r: SharedRow): Omit<JobForBoard, "quoteCents"> {
     lineCount: r._count.lines,
     customer: r.customer,
     nextEventAt: r.events[0]?.startAt ?? null,
+    stageEnteredAt: r.stages[0]?.enteredAt ?? null,
   };
 }
 
+/**
+ * Every job still in flight, as cards.
+ *
+ * The final stage and LOST are excluded: they are not followed up, and
+ * lib/board.ts would score them "ok" anyway.
+ */
 export async function boardCards(role: Role, now = new Date()): Promise<BoardCard[]> {
-  const where: Prisma.OrderWhereInput = { status: { notIn: ["COMPLETE", "LOST"] } };
+  const where: Prisma.OrderWhereInput = { status: { notIn: [FINAL_STAGE, "LOST"] } };
   const orderBy: Prisma.OrderOrderByWithRelationInput = { createdAt: "asc" };
 
   // Two explicit branches rather than one query and a conditional spread: a

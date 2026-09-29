@@ -34,7 +34,7 @@ function job(over: Partial<JobForBoard> = {}): JobForBoard {
     id: "o1",
     jobNumber: "HP-2609-001",
     pipeline: "SHORT",
-    status: "WON",
+    status: "ORDER_ACTIVE",
     address: "12 Rose St",
     suburb: "Prospect",
     quoteCents: 210_000,
@@ -42,6 +42,7 @@ function job(over: Partial<JobForBoard> = {}): JobForBoard {
     customer: { ...COMPLETE_CUSTOMER },
     createdAt: daysBefore(20),
     wonAt: daysBefore(1),
+    stageEnteredAt: daysBefore(1),
     completedAt: null,
     nextEventAt: null,
     ...over,
@@ -58,21 +59,19 @@ describe("the worst signal wins", () => {
 });
 
 describe("how long is too long", () => {
-  it("is measured per stage, not one number for everything", () => {
-    // Six days is fine for fabrication and well past it for an enquiry. A
-    // single threshold would either nag about fabrication or miss dead leads.
-    assert.equal(ageTone("FABRICATING", 6), "ok");
-    assert.equal(ageTone("ENQUIRY", 6), "late");
-  });
-
-  it("goes amber then red as the days pass", () => {
-    assert.equal(ageTone("ENQUIRY", 1), "ok");
-    assert.equal(ageTone("ENQUIRY", 2), "warn");
-    assert.equal(ageTone("ENQUIRY", 4), "late");
+  it("is the same three and five days for every stage", () => {
+    // One pair of numbers everyone knows, matching the timeline legend, rather
+    // than a per-stage table nobody remembers.
+    for (const stage of ["INITIAL", "FACTORY", "INSTALLATION"] as const) {
+      assert.equal(ageTone(stage, 2), "ok", stage);
+      assert.equal(ageTone(stage, 3), "warn", stage);
+      assert.equal(ageTone(stage, 4), "warn", stage);
+      assert.equal(ageTone(stage, 5), "late", stage);
+    }
   });
 
   it("never chases finished or abandoned work", () => {
-    assert.equal(ageTone("COMPLETE", 900), "ok");
+    assert.equal(ageTone("INVOICE", 900), "ok");
     assert.equal(ageTone("LOST", 900), "ok");
   });
 });
@@ -115,54 +114,57 @@ describe("what the office is missing", () => {
   it("does not nag a fresh enquiry for what it cannot have yet", () => {
     // No address and no cut list is normal before a job is won. Flagging it
     // would make the board cry wolf, and a board that cries wolf is ignored.
-    const gaps = gapsFor(job({ status: "ENQUIRY", address: "", lineCount: 0, quoteCents: 0 }));
+    const gaps = gapsFor(job({ status: "INITIAL", address: "", lineCount: 0, quoteCents: 0 }));
     assert.equal(gaps.find((g) => g.field === "address")?.blocking, false);
     assert.ok(!gaps.some((g) => g.field === "lines"));
     assert.ok(!gaps.some((g) => g.field === "quote"));
   });
 
-  it("does want a cut list once the job is won", () => {
-    const gaps = gapsFor(job({ status: "WON", lineCount: 0 }));
-    assert.equal(gaps.find((g) => g.field === "lines")?.blocking, true);
+  it("wants a cut list from the measure onward, not the moment the order opens", () => {
+    // A job that has just gone active has not been measured yet, so having
+    // nothing on the cut list is normal. Once someone has been out to measure
+    // it, an empty cut list stops the work.
+    assert.ok(!gapsFor(job({ status: "ORDER_ACTIVE", lineCount: 0 })).some((g) => g.field === "lines"));
+    for (const stage of ["MEASURED", "DETAILS", "FACTORY", "INSTALLATION"] as const) {
+      const gaps = gapsFor(job({ status: stage, lineCount: 0 }));
+      assert.equal(gaps.find((g) => g.field === "lines")?.blocking, true, stage);
+    }
   });
 
   it("stays quiet on finished and abandoned jobs", () => {
-    assert.deepEqual(gapsFor(job({ status: "COMPLETE", address: "", customer: { name: null, phone: null, email: null } })), []);
+    assert.deepEqual(gapsFor(job({ status: "INVOICE", address: "", customer: { name: null, phone: null, email: null } })), []);
     assert.deepEqual(gapsFor(job({ status: "LOST", address: "" })), []);
   });
 
   it("never raises a money gap for an employee", () => {
     // quoteCents absent means it was never read, which is not the same as
     // zero. An employee must not be shown a gap they cannot see or fix.
-    const asEmployee = job({ status: "WON" });
+    const asEmployee = job({ status: "ORDER_ACTIVE" });
     delete asEmployee.quoteCents;
     assert.ok(!gapsFor(asEmployee).some((g) => g.field === "quote"));
 
-    const asAdmin = job({ status: "WON", quoteCents: 0 });
+    const asAdmin = job({ status: "ORDER_ACTIVE", quoteCents: 0 });
     assert.ok(gapsFor(asAdmin).some((g) => g.field === "quote"));
   });
 });
 
 describe("when the job last moved", () => {
-  it("counts from when it was won, once it has been", () => {
-    const j = job({ status: "CUTTING", createdAt: daysBefore(30), wonAt: daysBefore(3) });
+  it("reads the stage history, which is the record", () => {
+    const j = job({ createdAt: daysBefore(30), stageEnteredAt: daysBefore(3) });
     assert.equal(stageSince(j).getTime(), daysBefore(3).getTime());
   });
 
-  it("counts from when it arrived, before that", () => {
-    const j = job({ status: "ENQUIRY", createdAt: daysBefore(30), wonAt: null });
-    assert.equal(stageSince(j).getTime(), daysBefore(30).getTime());
-  });
-
-  it("falls back to creation when a won job somehow has no wonAt", () => {
-    const j = job({ status: "WON", createdAt: daysBefore(9), wonAt: null });
+  it("falls back to creation for a job written before the history existed", () => {
+    // Wrong, but never wildly so, and it stops a card vanishing from the board
+    // because its history is missing.
+    const j = job({ createdAt: daysBefore(9), stageEnteredAt: null });
     assert.equal(stageSince(j).getTime(), daysBefore(9).getTime());
   });
 });
 
 describe("a card", () => {
   it("is green when it is moving and complete", () => {
-    const c = toCard(job({ status: "WON", wonAt: daysBefore(1) }), NOW);
+    const c = toCard(job({ status: "ORDER_ACTIVE", stageEnteredAt: daysBefore(1) }), NOW);
     assert.equal(c.tone, "ok");
     assert.equal(c.daysInStage, 1);
     assert.equal(c.datePassed, false);
@@ -171,7 +173,7 @@ describe("a card", () => {
   it("takes the worse of age and missing detail", () => {
     // Fresh, so the age is fine; but no phone number, which is blocking.
     const c = toCard(
-      job({ wonAt: daysBefore(1), customer: { ...COMPLETE_CUSTOMER, phone: "" } }),
+      job({ stageEnteredAt: daysBefore(1), customer: { ...COMPLETE_CUSTOMER, phone: "" } }),
       NOW,
     );
     assert.equal(c.ageTone, "ok");
@@ -180,29 +182,29 @@ describe("a card", () => {
   });
 
   it("goes red when a booked date has come and gone", () => {
-    const c = toCard(job({ status: "SCHEDULED", pipeline: "FULL", wonAt: daysBefore(2), nextEventAt: daysBefore(3) }), NOW);
+    const c = toCard(job({ status: "INSTALLATION", stageEnteredAt: daysBefore(2), nextEventAt: daysBefore(3) }), NOW);
     assert.equal(c.datePassed, true);
     assert.equal(c.tone, "late");
   });
 
   it("does not flag a booking that is still ahead", () => {
     const ahead = zonedTime(2026, 10, 6, 9, 0);
-    const c = toCard(job({ status: "SCHEDULED", pipeline: "FULL", wonAt: daysBefore(1), nextEventAt: ahead }), NOW);
+    const c = toCard(job({ status: "INSTALLATION", stageEnteredAt: daysBefore(1), nextEventAt: ahead }), NOW);
     assert.equal(c.datePassed, false);
   });
 
   it("never counts negative days from a date in the future", () => {
-    const c = toCard(job({ createdAt: zonedTime(2026, 10, 20), wonAt: null, status: "ENQUIRY" }), NOW);
+    const c = toCard(job({ stageEnteredAt: zonedTime(2026, 10, 20), status: "INITIAL" }), NOW);
     assert.equal(c.daysInStage, 0);
   });
 });
 
 describe("filters", () => {
   const cards = [
-    toCard(job({ id: "a", wonAt: daysBefore(1) }), NOW), // ok
-    toCard(job({ id: "b", customer: { ...COMPLETE_CUSTOMER, email: null }, wonAt: daysBefore(1) }), NOW), // warn, missing
-    toCard(job({ id: "c", status: "ENQUIRY", wonAt: null, createdAt: daysBefore(9) }), NOW), // late by age
-    toCard(job({ id: "d", status: "SCHEDULED", pipeline: "FULL", wonAt: daysBefore(1), nextEventAt: daysBefore(2) }), NOW), // date passed
+    toCard(job({ id: "a", stageEnteredAt: daysBefore(1) }), NOW), // ok
+    toCard(job({ id: "b", customer: { ...COMPLETE_CUSTOMER, email: null }, stageEnteredAt: daysBefore(1) }), NOW), // warn, missing
+    toCard(job({ id: "c", status: "INITIAL", stageEnteredAt: daysBefore(9) }), NOW), // late by age
+    toCard(job({ id: "d", status: "INSTALLATION", stageEnteredAt: daysBefore(1), nextEventAt: daysBefore(2) }), NOW), // date passed
   ];
 
   it("shows everything, or only what needs a look", () => {
@@ -225,37 +227,23 @@ describe("filters", () => {
 });
 
 describe("columns", () => {
-  it("never shows a column the board excludes", () => {
-    // COMPLETE and LOST are filtered out at the query, so a column for either
-    // would always read zero.
-    assert.ok(!BOARD_STAGES.includes("COMPLETE"));
+  it("never shows a column that could only read zero", () => {
+    // A job at INVOICE is finished and LOST is not a stage; both are excluded
+    // at the query, so a column for either would always be empty.
+    assert.ok(!BOARD_STAGES.includes("INVOICE"));
     assert.ok(!BOARD_STAGES.includes("LOST"));
   });
 
-  it("puts cutting straight after won, not last", () => {
-    // Concatenating the two pipelines' stage lists put CUTTING — the short
-    // pipeline's only post-win stage — after INSTALLED, reading as though
-    // offcut jobs are cut at the very end.
-    const all = columnsFor();
-    assert.ok(all.indexOf("CUTTING") === all.indexOf("WON") + 1);
-    assert.ok(all.indexOf("CUTTING") < all.indexOf("INSTALLED"));
-  });
-
-  it("narrows to one pipeline's own stages", () => {
-    assert.deepEqual(columnsFor("SHORT"), ["ENQUIRY", "QUOTED", "WON", "CUTTING"]);
-    assert.deepEqual(columnsFor("FULL"), [
-      "ENQUIRY", "QUOTED", "WON", "TEMPLATED", "FABRICATING", "SCHEDULED", "INSTALLED",
-    ]);
+  it("keeps the stages in the order work progresses", () => {
+    assert.deepEqual(columnsFor(), STAGES.filter((s) => s !== "INVOICE"));
   });
 
   it("every stage a card can be in has a column", () => {
     // Otherwise a job silently vanishes from the board rather than showing up
     // somewhere wrong, which is worse.
-    for (const p of ["SHORT", "FULL"] as const) {
-      for (const s of STAGES[p]) {
-        if (s === "COMPLETE") continue;
-        assert.ok(columnsFor(p).includes(s), `${p}/${s} has no column`);
-      }
+    for (const s of STAGES) {
+      if (s === "INVOICE") continue;
+      assert.ok(columnsFor().includes(s), `${s} has no column`);
     }
   });
 });
