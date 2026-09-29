@@ -24,6 +24,21 @@ const good = {
 };
 
 describe("booking validation", () => {
+  it("reads the form's time as business time, not the server's", () => {
+    // The datetime-local input sends "2026-09-18T09:00" with no zone. On a UTC
+    // server that used to become 09:00 UTC: 5pm in Perth, eight hours late.
+    const prev = process.env.BUSINESS_TIMEZONE;
+    process.env.BUSINESS_TIMEZONE = "Australia/Perth";
+    try {
+      const r = validateBooking({ ...good, preferredAt: "2026-09-18T09:00" }, NOW);
+      assert.ok(r.ok);
+      assert.equal(r.ok && r.value.preferredAt.toISOString(), "2026-09-18T01:00:00.000Z");
+    } finally {
+      if (prev === undefined) delete process.env.BUSINESS_TIMEZONE;
+      else process.env.BUSINESS_TIMEZONE = prev;
+    }
+  });
+
   it("accepts a sensible request", () => {
     const r = validateBooking({ ...good }, NOW);
     assert.equal(r.ok, true);

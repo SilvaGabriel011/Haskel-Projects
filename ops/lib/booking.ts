@@ -6,6 +6,7 @@
  * the only place where "what if they send rubbish" is not hypothetical.
  */
 import type { JobType } from "@prisma/client";
+import { parseWallTime } from "@/lib/business-time";
 
 /** Job types a customer may pick. Deliberately narrower than the internal enum. */
 export const BOOKABLE: readonly JobType[] = [
@@ -47,7 +48,10 @@ const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 function parseWhen(v: unknown, now: Date): Date | null {
   const raw = str(v);
   if (!raw) return null;
-  const d = new Date(raw);
+  // The form's datetime-local sends wall time with no zone ("2026-09-30T09:00").
+  // new Date() would read that in the server's zone, UTC, and book the customer
+  // eight hours late. It is the business's clock the customer is looking at.
+  const d = parseWallTime(raw);
   if (Number.isNaN(d.getTime())) return null;
   if (d.getTime() < now.getTime()) return null;
   if (d.getTime() > now.getTime() + 365 * 86_400_000) return null;

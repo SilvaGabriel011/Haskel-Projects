@@ -70,8 +70,11 @@ export default async function LoginPage({
               role="alert"
               className="mt-6 rounded-xl border border-rose bg-blush px-4 py-3 text-sm"
             >
-              That account cannot sign in here. It must be a Haskel Project account on the
-              staff list — check with Gabriel if you think it should be.
+              {error === "AccessDenied"
+                ? "That account cannot sign in here. It must be a Haskel Project account on the staff list. Check with Gabriel if you think it should be."
+                : // Anything else is the server, not the person: saying "your account
+                  // cannot sign in" here sends them looking in the wrong place.
+                  `Sign-in failed on our side, not because of your account (${error.slice(0, 40)}). Try again in a minute; if it keeps happening, the server log says why.`}
             </p>
           ) : null}
 

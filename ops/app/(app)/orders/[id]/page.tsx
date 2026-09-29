@@ -3,11 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AdvanceButton } from "@/components/advance-button";
+import { StockReserve } from "@/components/stock-reserve";
 import { Card, Empty, Pill, SectionTitle, dims, when } from "@/components/ui";
+import { formatDate, formatTime } from "@/lib/business-time";
 import { requireAccess } from "@/lib/guard";
 import { LABOUR_RATE_CENTS, formatAud, marginCents, marginPct } from "@/lib/money";
 import { PIPELINE_LABEL, STAGES, STATUS_LABEL, nextStage } from "@/lib/pipeline";
 import { getOrderDetail } from "@/lib/queries/orders";
+import { availableStock, heldForOrder } from "@/lib/reservations";
 
 export const metadata: Metadata = { title: "Job" };
 
@@ -17,6 +20,9 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const order = await getOrderDetail(id, user.role);
   if (!order) notFound();
+
+  const closed = order.status === "COMPLETE" || order.status === "LOST";
+  const [held, available] = await Promise.all([heldForOrder(order.id), closed ? null : availableStock()]);
 
   const stages = STAGES[order.pipeline];
   const reached = stages.indexOf(order.status);
@@ -149,6 +155,15 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             </Card>
           )}
 
+          {available ? (
+            <div className="mt-8">
+              <SectionTitle>Held for this job</SectionTitle>
+              <Card className="p-5">
+                <StockReserve orderId={order.id} held={held} available={available} />
+              </Card>
+            </div>
+          ) : null}
+
           <div className="mt-8">
             <SectionTitle>Stock movement</SectionTitle>
             {order.movements.length === 0 ? (
@@ -180,8 +195,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   <div className="flex items-center justify-between gap-3">
                     <Pill tone="busy">{e.kind.toLowerCase()}</Pill>
                     <span className="text-xs tabular-nums text-ink-2">
-                      {e.startAt.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}{" "}
-                      {e.startAt.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}
+                      {formatDate(e.startAt, { day: "numeric", month: "short" })}{" "}
+                      {formatTime(e.startAt)}
                     </span>
                   </div>
                   <div className="mt-2 text-xs text-ink-2">
