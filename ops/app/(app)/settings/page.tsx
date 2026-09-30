@@ -37,7 +37,7 @@ export default async function SettingsPage() {
         </SectionTitle>
         <Card className="divide-y divide-line">
           {staff.map((u) => (
-            <StaffRow key={u.id} user={u} isSelf={u.id === me.id} />
+            <StaffRow key={u.id} user={u} isSelf={u.id === me.id} lastAdmin={u.active && u.role === "ADMIN" && admins === 1} />
           ))}
         </Card>
         <p className="mt-3 max-w-2xl text-xs text-muted">
