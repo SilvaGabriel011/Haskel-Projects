@@ -194,12 +194,19 @@ export default async function BoardPage({
           </Empty>
         </div>
       ) : (
-        <div className="mt-8 overflow-x-auto pb-4">
-          <div className="flex gap-4" style={{ minWidth: `${stages.length * 250}px` }}>
+        <div className="mt-8 pb-4 sm:overflow-x-auto">
+          {/* On a phone the stages stack, each only as tall as its own cards.
+              Side by side they scrolled sideways inside a row as tall as the
+              tallest column, so one card sat above a long empty gap. Empty
+              stages are left out there; from sm up it is the full board. */}
+          <div
+            className="flex flex-col gap-6 sm:min-w-(--board-min) sm:flex-row sm:gap-4"
+            style={{ "--board-min": `${stages.length * 250}px` } as React.CSSProperties}
+          >
             {stages.map((stage) => {
               const items = byStage.get(stage) ?? [];
               return (
-                <section key={stage} className="flex-1 min-w-[236px]">
+                <section key={stage} className={`sm:min-w-[236px] sm:flex-1 ${items.length ? "" : "hidden sm:block"}`}>
                   <div className="mb-3 flex items-baseline justify-between gap-2 px-1">
                     <h2 className="text-xs font-semibold uppercase tracking-[0.14em]">
                       {STATUS_LABEL[stage]}
