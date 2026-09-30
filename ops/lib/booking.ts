@@ -105,25 +105,86 @@ export function validateBooking(form: Record<string, unknown>, now = new Date())
 }
 
 /**
+ * Who is asking, as far as the headers can be trusted to say.
+ *
+ * X-Forwarded-For is a list the client starts and each proxy appends to, so
+ * its FIRST entry is whatever the client chose to write. Keying the limit on it
+ * let anyone send a new made-up address with every request and never be
+ * limited at all. Only the entries added by proxies we run behind are real.
+ *
+ *  - On Vercel the edge overwrites X-Forwarded-For and sets X-Real-IP to the
+ *    address it actually saw, so those are the client.
+ *  - Anywhere else, count `trustedHops` in from the RIGHT of the list: with
+ *    one reverse proxy in front (the usual case, and the default) that is the
+ *    last entry, the one our proxy appended. With no proxy at all nothing in
+ *    these headers can be trusted; set TRUSTED_PROXY_HOPS=0 and every request
+ *    shares one bucket, which is strict but cannot be dodged.
+ */
+export function clientIp(
+  headers: Pick<Headers, "get">,
+  env: { onVercel: boolean; trustedHops: number },
+): string {
+  const forwarded = (headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (env.onVercel) {
+    return headers.get("x-real-ip")?.trim() || forwarded[0] || "unknown";
+  }
+  if (env.trustedHops < 1) return "unknown";
+  return forwarded[forwarded.length - env.trustedHops] ?? "unknown";
+}
+
+/** TRUSTED_PROXY_HOPS as a whole number; unset or nonsense means one proxy. */
+export function trustedProxyHops(raw = process.env.TRUSTED_PROXY_HOPS): number {
+  const n = Number(raw);
+  return raw !== undefined && raw.trim() !== "" && Number.isInteger(n) && n >= 0 ? n : 1;
+}
+
+/**
  * Per-IP rate limit, in memory.
  *
  * Honest about what it is: one serverless instance's memory, so it slows a
  * casual flood rather than stopping a determined one. Good enough for a
  * stonemason's booking form; if real spam arrives, put Turnstile in front.
+ *
+ * The map is capped, and it used to be emptied outright when it reached the
+ * cap — so a few thousand requests from made-up addresses wiped everyone's
+ * count, the sender's own included. Now expired entries go first, and past
+ * that only the addresses that have been quiet longest; whoever is sending
+ * right now is the last thing forgotten.
  */
 const hits = new Map<string, number[]>();
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_PER_WINDOW = 5;
+export const MAX_TRACKED = 5000;
 
 export function rateLimit(ip: string, now = Date.now()): { ok: boolean; retryAfterMs?: number } {
   const recent = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
   if (recent.length >= MAX_PER_WINDOW) {
+    // Re-insert so a busy sender stays at the recent end of the map.
+    hits.delete(ip);
+    hits.set(ip, recent);
     return { ok: false, retryAfterMs: WINDOW_MS - (now - recent[0]) };
   }
   recent.push(now);
+  hits.delete(ip);
   hits.set(ip, recent);
-  if (hits.size > 5000) hits.clear(); // crude ceiling; never grows unbounded
+  if (hits.size > MAX_TRACKED) evict(now);
   return { ok: true };
+}
+
+function evict(now: number) {
+  for (const [key, times] of hits) {
+    if (times.every((t) => now - t >= WINDOW_MS)) hits.delete(key);
+  }
+  // Still full of live entries: drop the quietest. Map order is insertion
+  // order, and every hit re-inserts, so the front is the least recent.
+  for (const key of hits.keys()) {
+    if (hits.size <= MAX_TRACKED) break;
+    hits.delete(key);
+  }
 }
 
 /** Only for tests — the map is module state. */
