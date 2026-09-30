@@ -31,6 +31,14 @@ export async function findStaffByEmail(email: string | null | undefined): Promis
   return user;
 }
 
+/** Look someone up by id, active or not — the caller decides what inactive means. */
+export async function findStaffById(id: string): Promise<Staff | null> {
+  return db.user.findUnique({
+    where: { id },
+    select: { id: true, email: true, name: true, role: true, active: true },
+  });
+}
+
 export async function listStaff(): Promise<Staff[]> {
   return db.user.findMany({
     where: { active: true },
@@ -46,5 +54,6 @@ export {
   demoPasswordEnvFor,
   emailOnDomain,
   googleSignInBlockedReason,
+  revalidateToken,
   workspaceDomain,
 } from "./access-config";

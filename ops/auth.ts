@@ -19,7 +19,9 @@ import {
   demoPasswordEnvFor,
   emailOnDomain,
   findStaffByEmail,
+  findStaffById,
   googleSignInBlockedReason,
+  revalidateToken,
   workspaceDomain,
 } from "@/lib/staff";
 
@@ -79,17 +81,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return (await findStaffByEmail(email)) !== null;
     },
 
-    /** Stamp id, name and role onto the token once, at sign-in. */
+    /**
+     * At sign-in, stamp the staff id onto the token. On every later request,
+     * re-read that person: a deactivated account gets no session, and a role
+     * change applies on their next page rather than when the token expires.
+     *
+     * Runs on Node only. The edge proxy reads the token as it was last
+     * written, so it can lag one request behind; every page and server action
+     * goes through auth() here, and that is where access is decided.
+     */
     async jwt({ token, user }) {
       if (user?.email) {
         const staff = await findStaffByEmail(user.email);
-        if (staff) {
-          token.sub = staff.id;
-          token.role = staff.role;
-          token.name = staff.name;
-        }
+        // signIn already refused anyone not on the staff list; this closes the
+        // gap if they were removed in between rather than minting a token
+        // with no role.
+        if (!staff) return null;
+        token.sub = staff.id;
+        token.role = staff.role;
+        token.name = staff.name;
+        return token;
       }
-      return token;
+      return revalidateToken(token, findStaffById);
     },
   },
 });

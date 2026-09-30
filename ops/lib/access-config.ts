@@ -61,3 +61,28 @@ export function demoPasswordEnvFor(email: string): string | null {
   const local = email.split("@")[0]?.toUpperCase().replace(/[^A-Z0-9]/g, "_");
   return local ? `DEMO_${local}_PASSWORD_HASH` : null;
 }
+
+/** The staff fields a session carries. */
+export type StaffRecord = { id: string; email: string; name: string; role: "ADMIN" | "EMPLOYEE"; active: boolean };
+
+/**
+ * Re-read a signed-in person on every request, not only at sign-in.
+ *
+ * The role used to be stamped onto the token once, when they signed in, and
+ * trusted until the token expired — up to 30 days. Deactivating someone or
+ * taking admin away changed the User row and nothing else: they carried on
+ * with the access they had. Now the row is the answer every time. Absent or
+ * inactive means no session at all, and the role and name are whatever the
+ * row says now.
+ *
+ * `lookup` is passed in so this stays free of the database and testable.
+ */
+export async function revalidateToken<T extends { sub?: string | null; role?: unknown; name?: string | null; email?: string | null }>(
+  token: T,
+  lookup: (id: string) => Promise<StaffRecord | null>,
+): Promise<T | null> {
+  if (!token.sub) return null;
+  const staff = await lookup(token.sub);
+  if (!staff || !staff.active) return null;
+  return { ...token, role: staff.role, name: staff.name, email: staff.email };
+}
