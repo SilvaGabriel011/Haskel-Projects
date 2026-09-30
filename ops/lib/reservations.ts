@@ -138,9 +138,32 @@ export async function heldForOrder(orderId: string) {
     db.slab.findMany({ where: { id: { in: slabIds }, status: "RESERVED" }, select: { id: true, ref: true, rack: true } }),
   ]);
 
-  const mine = async (kind: StockKind, id: string) => (await heldBy(kind, id))?.orderId === orderId;
+  // Who holds each piece now: its newest RESERVED movement, the same rule as
+  // heldBy. One query per kind for every piece at once — asking heldBy piece by
+  // piece cost a round trip each.
+  const [offcutHolders, slabHolders] = await Promise.all([
+    offcuts.length
+      ? db.stockMovement.findMany({
+          where: { kind: "RESERVED", orderId: { not: null }, offcutId: { in: offcuts.map((o) => o.id) } },
+          orderBy: { createdAt: "desc" },
+          distinct: ["offcutId"],
+          select: { offcutId: true, orderId: true },
+        })
+      : [],
+    slabs.length
+      ? db.stockMovement.findMany({
+          where: { kind: "RESERVED", orderId: { not: null }, slabId: { in: slabs.map((s) => s.id) } },
+          orderBy: { createdAt: "desc" },
+          distinct: ["slabId"],
+          select: { slabId: true, orderId: true },
+        })
+      : [],
+  ]);
+  const offcutsHere = new Set(offcutHolders.filter((h) => h.orderId === orderId).map((h) => h.offcutId));
+  const slabsHere = new Set(slabHolders.filter((h) => h.orderId === orderId).map((h) => h.slabId));
+
   return {
-    offcuts: (await Promise.all(offcuts.map(async (o) => ((await mine("offcut", o.id)) ? o : null)))).filter((o) => o !== null),
-    slabs: (await Promise.all(slabs.map(async (s) => ((await mine("slab", s.id)) ? s : null)))).filter((s) => s !== null),
+    offcuts: offcuts.filter((o) => offcutsHere.has(o.id)),
+    slabs: slabs.filter((s) => slabsHere.has(s.id)),
   };
 }

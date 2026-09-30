@@ -13,7 +13,7 @@ import { after, before, describe, it } from "node:test";
 
 import { db } from "../lib/db";
 import { moveOrder } from "../lib/order-move";
-import { heldBy, reserveStock } from "../lib/reservations";
+import { heldBy, heldForOrder, reserveStock } from "../lib/reservations";
 
 const TAG = `move-${Date.now()}`;
 const orderIds: string[] = [];
@@ -122,5 +122,10 @@ describe("moving a job", () => {
 
     assert.equal((await db.offcut.findUniqueOrThrow({ where: { id: piece.id } })).status, "RESERVED");
     assert.equal((await heldBy("offcut", piece.id))?.orderId, second.id);
+
+    // The job page's list agrees with heldBy: reading every piece at once must
+    // not credit a piece to the job that merely held it once.
+    assert.deepEqual((await heldForOrder(second.id)).offcuts.map((o) => o.id), [piece.id]);
+    assert.deepEqual((await heldForOrder(first.id)).offcuts, []);
   });
 });

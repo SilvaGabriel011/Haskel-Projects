@@ -15,6 +15,8 @@
  * That is why offcut work shows the margin it does. It is an assumption, not a
  * fact, and the page says so.
  */
+import { cache } from "react";
+
 import { formatDate, monthKey, monthStart } from "@/lib/business-time";
 import { db } from "@/lib/db";
 import { FINAL_STAGE, STAGES, phase } from "@/lib/pipeline";
@@ -47,7 +49,19 @@ type CompletedJob = {
   }>;
 };
 
-async function completedSince(from: Date): Promise<CompletedJob[]> {
+/**
+ * Every completed job since `from`, loaded once per request.
+ *
+ * The financials page asks for this five times over — the series, the
+ * summary, the materials, the worst margins and the offcut split — and each
+ * used to run it afresh: four queries apiece, twenty of the page's twenty-five.
+ * Keyed on the timestamp, because every caller builds its own Date and the
+ * cache compares arguments by identity.
+ */
+const completedSince = (from: Date) => completedSinceMs(from.getTime());
+
+const completedSinceMs = cache(async (fromMs: number): Promise<CompletedJob[]> => {
+  const from = new Date(fromMs);
   return db.order.findMany({
     where: { status: FINAL_STAGE, completedAt: { gte: from } },
     select: {
@@ -63,7 +77,7 @@ async function completedSince(from: Date): Promise<CompletedJob[]> {
     },
     orderBy: { completedAt: "asc" },
   }) as Promise<CompletedJob[]>;
-}
+});
 
 /** Material cost for one job, under the model documented at the top of this file. */
 export function jobMaterialCostCents(job: Pick<CompletedJob, "lines">): number {

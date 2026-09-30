@@ -167,6 +167,12 @@ model StockMovement {
 
   @@index([createdAt])
   @@index([kind])
+  // "Which job holds this piece" reads a piece's newest RESERVED row. With only
+  // createdAt to go on, a piece with no reservation scanned the whole log.
+  @@index([offcutId, createdAt])
+  @@index([slabId, createdAt])
+  // A job's own movements, and what it has reserved (the job page).
+  @@index([orderId, kind])
 }
 
 // ---------------------------------------------------------------- orders
@@ -192,6 +198,8 @@ model Customer {
   orders Order[]
 
   @@index([source])
+  // Accepting a booking matches an existing customer on phone first.
+  @@index([phone])
 }
 
 enum Pipeline {
@@ -264,6 +272,8 @@ model Order {
   @@index([pipeline])
   @@index([createdAt])
   @@index([completedAt])
+  // Postgres does not index a foreign key by itself.
+  @@index([customerId])
 }
 
 model OrderLine {
@@ -357,6 +367,8 @@ model ScheduleEvent {
 
   @@index([startAt])
   @@index([kind])
+  // A job's bookings: the job page, and the board's latest-booking check.
+  @@index([orderId, startAt])
 }
 
 model ScheduleAssignee {

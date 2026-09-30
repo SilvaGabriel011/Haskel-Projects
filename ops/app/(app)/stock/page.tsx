@@ -7,7 +7,7 @@ import { Card, Empty, FilterChips, Pill, SectionTitle, Tile, dims, sqm, when } f
 import { requireAccess } from "@/lib/guard";
 import { formatAud } from "@/lib/money";
 import {
-  listConsumables, listMaterialOptions, listSlabOptions, listSlabs, lowStockConsumables,
+  listConsumables, listMaterialOptions, listSlabOptions, listSlabs,
   recentMovements, stockCounts, stockValueCents,
 } from "@/lib/queries/stock";
 import type { SlabStatus } from "@prisma/client";
@@ -38,11 +38,10 @@ export default async function StockPage({
   const { status } = await searchParams;
   const filter = (["IN_STOCK", "RESERVED", "CUT", "SOLD"] as const).find((s) => s === status);
 
-  const [slabs, counts, low, consumables, movements, valueCents, materialOptions, slabOptions] =
+  const [slabs, counts, consumables, movements, valueCents, materialOptions, slabOptions] =
     await Promise.all([
       listSlabs(user.role, filter ? { status: filter } : {}),
       stockCounts(),
-      lowStockConsumables(),
       listConsumables(user.role),
       recentMovements(8),
       isAdmin ? stockValueCents() : Promise.resolve(0),
@@ -50,6 +49,9 @@ export default async function StockPage({
       isAdmin ? listMaterialOptions() : Promise.resolve([]),
       isAdmin ? listSlabOptions() : Promise.resolve([]),
     ]);
+  // Every consumable is already on the page; the low ones are a filter of that
+  // list, not another trip to the database.
+  const low = consumables.filter((c) => c.qtyOnHand <= c.reorderPoint);
 
   return (
     <>

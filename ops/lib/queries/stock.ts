@@ -153,14 +153,13 @@ export async function listConsumables<R extends Role>(role: R) {
   return rows as ConsumableForRole<R>[];
 }
 
-/** Anything at or below its reorder point. Both roles — running out is everyone's problem. */
-export async function lowStockConsumables() {
-  const all = await db.consumable.findMany({
-    select: { id: true, name: true, unit: true, qtyOnHand: true, reorderPoint: true },
-    orderBy: { name: "asc" },
-  });
-  return all.filter((c) => c.qtyOnHand <= c.reorderPoint);
-}
+/**
+ * At or below its reorder point — both roles see it, since running out is
+ * everyone's problem. Compared in the database, not by fetching every row.
+ */
+const AT_REORDER_POINT = {
+  qtyOnHand: { lte: db.consumable.fields.reorderPoint },
+} satisfies Prisma.ConsumableWhereInput;
 
 // ------------------------------------------------------------ headline numbers
 
@@ -170,7 +169,7 @@ export async function stockCounts() {
     db.slab.count({ where: { status: "RESERVED" } }),
     db.offcut.count({ where: { status: "AVAILABLE" } }),
     db.offcut.count({ where: { listedPublicly: true } }),
-    lowStockConsumables().then((r) => r.length),
+    db.consumable.count({ where: AT_REORDER_POINT }),
   ]);
   return { slabsInStock, slabsReserved, offcutsAvailable, offcutsListed, lowStock };
 }
