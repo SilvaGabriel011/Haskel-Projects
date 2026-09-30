@@ -1,5 +1,33 @@
 import type { Metadata } from "next";
+import { Playfair_Display, Poppins } from "next/font/google";
 import "./globals.css";
+
+/*
+ * Fonts are downloaded at build time and served from this app.
+ *
+ * They used to come from a Google Fonts stylesheet linked in <head>: a
+ * render-blocking request to a third party on every page, two more
+ * connections before any text could be drawn, and a jump when the real font
+ * swapped in. Self-hosted, they preload with the page, and the fallback is
+ * sized to match so the swap does not shift the layout.
+ *
+ * Same families, weights and styles as before. globals.css reads the two
+ * variables through --font-sans and --font-display.
+ */
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-poppins",
+  display: "swap",
+});
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["500", "600"],
+  style: ["italic"],
+  variable: "--font-playfair",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -12,14 +40,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-AU">
+    <html lang="en-AU" className={`${poppins.variable} ${playfair.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,500;1,600&family=Poppins:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
         <link
           rel="icon"
           href={
