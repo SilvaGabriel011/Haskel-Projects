@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 
 import { db } from "../lib/db";
-import { belongsTo } from "../lib/pipeline";
+import { FINAL_STAGE, isStage } from "../lib/pipeline";
 
 after(async () => { await db.$disconnect(); });
 
@@ -21,10 +21,28 @@ describe("seed integrity", () => {
     assert.equal(orphans, 0, `${orphans} movements name nothing`);
   });
 
-  it("every order status is legal for its pipeline", async () => {
-    const orders = await db.order.findMany({ select: { jobNumber: true, pipeline: true, status: true } });
-    const bad = orders.filter((o) => !belongsTo(o.pipeline, o.status));
-    assert.deepEqual(bad.map((o) => `${o.jobNumber}:${o.pipeline}/${o.status}`), []);
+  it("every order sits at a real stage", async () => {
+    const orders = await db.order.findMany({ select: { jobNumber: true, status: true } });
+    const bad = orders.filter((o) => o.status !== "LOST" && !isStage(o.status));
+    assert.deepEqual(bad.map((o) => `${o.jobNumber}/${o.status}`), []);
+  });
+
+  it("every order has stage history, and exactly one open spell unless it is done", async () => {
+    // Without an open spell the follow-up board cannot tell how long a job has
+    // sat, and falls back to guessing from its creation date.
+    const orders = await db.order.findMany({
+      select: { jobNumber: true, status: true, stages: { select: { exitedAt: true } } },
+    });
+    const noHistory = orders.filter((o) => o.stages.length === 0);
+    assert.deepEqual(noHistory.map((o) => o.jobNumber), [], "orders with no stage history");
+
+    const bad = orders.filter((o) => {
+      const open = o.stages.filter((s) => s.exitedAt === null).length;
+      const settled = o.status === FINAL_STAGE || o.status === "LOST";
+      return settled ? open !== 0 : open !== 1;
+    });
+    assert.deepEqual(bad.map((o) => `${o.jobNumber}/${o.status}`), [],
+      "orders whose open spell does not match their status");
   });
 
   it("every offcut points at a real parent slab", async () => {
@@ -41,9 +59,9 @@ describe("seed integrity", () => {
   });
 
   it("completed orders have a completion date, open ones do not", async () => {
-    const missing = await db.order.count({ where: { status: "COMPLETE", completedAt: null } });
+    const missing = await db.order.count({ where: { status: FINAL_STAGE, completedAt: null } });
     assert.equal(missing, 0);
-    const premature = await db.order.count({ where: { status: { in: ["ENQUIRY", "QUOTED"] }, completedAt: { not: null } } });
+    const premature = await db.order.count({ where: { status: { in: ["INITIAL", "QUOTE_REQUEST", "QUOTED"] }, completedAt: { not: null } } });
     assert.equal(premature, 0);
   });
 
@@ -56,7 +74,7 @@ describe("seed integrity", () => {
     const without = await db.order.count({
       where: {
         lines: { none: {} },
-        status: { in: ["WON", "CUTTING", "TEMPLATED", "FABRICATING", "SCHEDULED", "INSTALLED", "COMPLETE"] },
+        status: { in: ["ORDER_ACTIVE", "PURCHASE_ORDER", "MEASURED", "DETAILS", "FACTORY", "READY_FOR_DISPATCH", "INSTALLATION", "INVOICE"] },
       },
     });
     assert.equal(without, 0, "a won job with no lines would drop out of the revenue chart");
@@ -66,12 +84,19 @@ describe("seed integrity", () => {
     const { revenueByMaterial } = await import("../lib/queries/financials");
     const [attributed, completed] = await Promise.all([
       revenueByMaterial().then((rows) => rows.reduce((t, r) => t + r.cents, 0)),
-      db.order.aggregate({ where: { status: "COMPLETE" }, _sum: { quoteCents: true } }),
+      db.order.aggregate({ where: { status: FINAL_STAGE }, _sum: { quoteCents: true } }),
     ]);
     // Top 8 materials only, so attributed <= total; but it must not be far off,
     // which would mean jobs are falling through the attribution entirely.
     const total = completed._sum.quoteCents ?? 0;
     assert.ok(attributed > total * 0.8, `only ${attributed} of ${total} attributed to a material`);
+  });
+
+  it("the diary is not empty", async () => {
+    // A status rename once left the schedule generator matching nothing, and
+    // the seed reported "events: 0" without complaining.
+    const events = await db.scheduleEvent.count();
+    assert.ok(events > 20, `only ${events} schedule events — the generator matched nothing`);
   });
 
   it("some offcuts are flagged for the public website", async () => {
@@ -83,7 +108,7 @@ describe("seed integrity", () => {
 describe("pricing makes sense", () => {
   it("no completed job is quoted below the cost of its own stone", async () => {
     const jobs = await db.order.findMany({
-      where: { status: "COMPLETE" },
+      where: { status: FINAL_STAGE },
       select: {
         jobNumber: true, quoteCents: true,
         lines: { select: { sqm: true, offcutId: true, material: { select: { costPerSqmCents: true } } } },

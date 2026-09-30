@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { PageHead } from "@/components/page-head";
+import { WeekRuns } from "@/components/week-runs";
 import { Card, Empty, Pill } from "@/components/ui";
 import { formatDate, formatTime, isoDay, parseWallTime, startOfDay } from "@/lib/business-time";
 import { requireAccess } from "@/lib/guard";
@@ -97,6 +98,8 @@ export default async function SchedulePage({
           ))}
         </div>
       ) : null}
+
+      <WeekRuns events={events} />
 
       {events.length === 0 ? (
         <div className="mt-8"><Empty>Nothing booked this week.</Empty></div>

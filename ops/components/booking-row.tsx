@@ -23,7 +23,7 @@ type Req = {
 };
 
 // Formatted in the business zone, passed down from the server: rendering on the
-// server (UTC) and again in the browser must agree, and both must say Perth.
+// server (UTC) and again in the browser must agree, and both must say Adelaide.
 const hhmm = (d: Date, tz?: string) => d.toLocaleTimeString("en-AU", { timeZone: tz, hour: "numeric", minute: "2-digit" });
 const clashLine = (c: Clash, tz?: string) =>
   `${c.jobNumber ?? "Internal"} · ${c.kind.toLowerCase()} ${hhmm(c.startAt, tz)} to ${hhmm(c.endAt, tz)}`;

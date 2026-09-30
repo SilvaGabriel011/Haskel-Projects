@@ -26,7 +26,7 @@ function moneyKeysIn(obj: unknown, path = ""): string[] {
 let orderId: string;
 
 before(async () => {
-  const o = await db.order.findFirst({ where: { status: "COMPLETE" }, select: { id: true } });
+  const o = await db.order.findFirst({ where: { status: "INVOICE" }, select: { id: true } });
   assert.ok(o, "seed must contain a completed order — run npm run db:seed");
   orderId = o.id;
 });

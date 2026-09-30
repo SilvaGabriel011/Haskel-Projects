@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 
 import { db } from "../lib/db";
+import { zonedParts, zonedTime } from "../lib/business-time";
 import { addDays, byDay, listWeek, visibleTo, weekStart } from "../lib/queries/schedule";
 
 after(async () => { await db.$disconnect(); });
@@ -24,22 +25,31 @@ describe("an employee cannot widen their own view", () => {
 });
 
 describe("weeks", () => {
+  // Asserted through zonedParts, not getDay/getHours/getDate. Those read the
+  // SERVER's clock, and a week starts on Monday midnight in the BUSINESS's
+  // zone — in Adelaide that instant is Sunday 14:30 UTC, so the old assertions
+  // only held while BUSINESS_TIMEZONE was unset. They passed by agreeing with
+  // the bug rather than with the intent.
+  // Fixtures are built with zonedTime, not a zoneless date string: `new
+  // Date("2026-09-20T15:00:00")` means 3pm to the SERVER, which is already
+  // half past midnight on Monday in Adelaide — the wrong week, and not what
+  // the case is about.
   it("starts on Monday whatever day you ask from", () => {
-    for (const d of ["2026-09-14", "2026-09-17", "2026-09-20"]) {
-      const s = weekStart(new Date(`${d}T09:00:00`));
-      assert.equal(s.getDay(), 1, `${d} should land on a Monday`);
-      assert.equal(s.getHours(), 0);
+    for (const day of [14, 17, 20]) {
+      const p = zonedParts(weekStart(zonedTime(2026, 9, day, 9, 0)));
+      assert.equal(p.weekday, 1, `the ${day}th should land on a Monday`);
+      assert.equal(p.hour, 0, `the ${day}th should land on midnight`);
+      assert.equal(p.minute, 0);
     }
   });
 
   it("a Sunday belongs to the week that just ended, not the one starting", () => {
-    const sunday = new Date("2026-09-20T15:00:00");
-    const start = weekStart(sunday);
-    assert.equal(start.getDate(), 14);
+    const sundayAfternoon = zonedTime(2026, 9, 20, 15, 0);
+    assert.equal(zonedParts(weekStart(sundayAfternoon)).day, 14);
   });
 
   it("buckets events into seven days, Monday first", () => {
-    const from = weekStart(new Date("2026-09-14T00:00:00"));
+    const from = weekStart(zonedTime(2026, 9, 14));
     const events = [
       { startAt: new Date(from) },
       { startAt: addDays(from, 3) },
@@ -54,7 +64,7 @@ describe("weeks", () => {
   });
 
   it("drops anything outside the week rather than mis-filing it", () => {
-    const from = weekStart(new Date("2026-09-14T00:00:00"));
+    const from = weekStart(zonedTime(2026, 9, 14));
     const days = byDay([{ startAt: addDays(from, 9) }, { startAt: addDays(from, -2) }], from);
     assert.equal(days.flat().length, 0);
   });

@@ -17,7 +17,7 @@ const INSTALLER = {
   password: process.env.E2E_INSTALLER_PASSWORD ?? "",
 };
 
-const APP_ROUTES = ["/dashboard", "/stock", "/offcuts", "/orders", "/schedule", "/bookings", "/financials", "/settings"];
+const APP_ROUTES = ["/dashboard", "/stock", "/offcuts", "/orders", "/board", "/schedule", "/bookings", "/financials", "/settings"];
 const ADMIN_ONLY = ["/bookings", "/financials", "/settings"];
 
 async function signIn(page: Page, who: { email: string; password: string }) {

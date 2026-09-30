@@ -3,13 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AdvanceButton } from "@/components/advance-button";
+import { StageTimeline } from "@/components/stage-timeline";
 import { StockReserve } from "@/components/stock-reserve";
 import { Card, Empty, Pill, SectionTitle, dims, when } from "@/components/ui";
 import { formatDate, formatTime } from "@/lib/business-time";
 import { requireAccess } from "@/lib/guard";
 import { LABOUR_RATE_CENTS, formatAud, marginCents, marginPct } from "@/lib/money";
-import { PIPELINE_LABEL, STAGES, STATUS_LABEL, nextStage } from "@/lib/pipeline";
-import { getOrderDetail } from "@/lib/queries/orders";
+import { FINAL_STAGE, PIPELINE_LABEL, STATUS_LABEL, nextStage } from "@/lib/pipeline";
+import { getOrderDetail, stageHistory } from "@/lib/queries/orders";
 import { availableStock, heldForOrder } from "@/lib/reservations";
 
 export const metadata: Metadata = { title: "Job" };
@@ -21,12 +22,14 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const order = await getOrderDetail(id, user.role);
   if (!order) notFound();
 
-  const closed = order.status === "COMPLETE" || order.status === "LOST";
-  const [held, available] = await Promise.all([heldForOrder(order.id), closed ? null : availableStock()]);
+  const closed = order.status === FINAL_STAGE || order.status === "LOST";
+  const [held, available, stages_] = await Promise.all([
+    heldForOrder(order.id),
+    closed ? null : availableStock(),
+    stageHistory(order.id),
+  ]);
 
-  const stages = STAGES[order.pipeline];
-  const reached = stages.indexOf(order.status);
-  const next = nextStage(order.pipeline, order.status);
+  const next = nextStage(order.status);
 
   // Admin only — the numbers simply are not present on an employee payload.
   let margin: { cents: number; pct: number; materials: number } | null = null;
@@ -59,30 +62,14 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           </p>
         </div>
         <div className="flex flex-col items-end gap-3">
-          <Pill tone={order.status === "COMPLETE" ? "good" : order.status === "LOST" ? "gone" : "busy"}>
+          <Pill tone={order.status === FINAL_STAGE ? "good" : order.status === "LOST" ? "gone" : "busy"}>
             {STATUS_LABEL[order.status]}
           </Pill>
           {next ? <AdvanceButton orderId={order.id} to={next} label={`Move to ${STATUS_LABEL[next]}`} /> : null}
         </div>
       </header>
 
-      {/* Stage track — shows where this job is on its own pipeline. */}
-      <ol className="mt-8 flex flex-wrap gap-2">
-        {stages.map((s, i) => (
-          <li
-            key={s}
-            className={`rounded-full border px-4 py-1.5 text-xs font-semibold ${
-              i < reached
-                ? "border-line bg-blush-2 text-ink-2"
-                : i === reached
-                  ? "border-rose bg-rose text-white"
-                  : "border-dashed border-line bg-transparent text-muted"
-            }`}
-          >
-            {STATUS_LABEL[s]}
-          </li>
-        ))}
-      </ol>
+      <StageTimeline rows={stages_} />
 
       {isAdmin && "quoteCents" in order && margin ? (
         <section className="mt-9 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

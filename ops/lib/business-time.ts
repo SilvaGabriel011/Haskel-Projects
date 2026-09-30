@@ -1,7 +1,8 @@
 /**
  * Dates as the business sees them.
  *
- * The server runs in UTC. The business runs in BUSINESS_TIMEZONE (Perth). Any
+ * The server runs in UTC. The business runs in BUSINESS_TIMEZONE (Adelaide,
+ * UTC+9:30 with daylight saving). Any
  * code that asks a Date for its hours, its day, or "midnight" gets the
  * server's answer unless told otherwise, which is how a 9am job showed as 1am
  * and a Monday 7am job landed in the previous week. Everything that formats a

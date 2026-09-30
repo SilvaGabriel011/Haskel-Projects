@@ -11,7 +11,7 @@ import { addDays, daysBetween, startOfDay, weekStart } from "@/lib/business-time
 import { db } from "@/lib/db";
 
 // Weeks and days are the business's, not the server's: the server runs in UTC,
-// where Monday midnight is 8am in Perth. See lib/business-time.ts.
+// where Monday midnight is already 9:30am in Adelaide. See lib/business-time.ts.
 export { addDays, weekStart };
 
 /**
@@ -35,6 +35,9 @@ const EVENT_SELECT = {
   order: {
     select: {
       id: true, jobNumber: true, jobType: true, pipeline: true,
+      // Where the job is, so lib/routes can group a week into runs. Not money,
+      // so both roles read it.
+      suburb: true,
       customer: { select: { name: true, phone: true } },
     },
   },

@@ -1,8 +1,14 @@
 /**
  * Demo data — invented, but shaped like the real business.
  *
- * DETERMINISTIC: a fixed-seed PRNG, so `npm run db:reset` reproduces byte-identical
- * data. Screenshots stay stable and "it looked different yesterday" never happens.
+ * DETERMINISTIC WITHIN A DAY: a fixed-seed PRNG, and the whole timeline hangs
+ * off midnight today in the business zone. Reseeding on the same day reproduces
+ * byte-identical data, so screenshots stay stable and CI is reproducible.
+ *
+ * It used to hang off a hard-coded date, which was deterministic forever and
+ * quietly rotted: a fortnight later every job on the follow-up board was weeks
+ * overdue and the whole thing showed red, so the one distinction it exists to
+ * draw could not be seen. Demo data that ages is demo data that misleads.
  *
  * Weighted to reflect what Haskel actually does: offcut and small jobs dominate,
  * benchtop installs are the minority.
@@ -19,6 +25,8 @@ import {
 } from "@prisma/client";
 
 import { hashPassword } from "../lib/password";
+import { startOfDay, zonedParts, zonedTime } from "../lib/business-time";
+import { FINAL_STAGE, STAGES } from "../lib/pipeline";
 
 // ---- deterministic randomness (mulberry32) -------------------------------
 let _s = 0x9e3779b9;
@@ -86,8 +94,10 @@ const db = new PrismaClient({ adapter });
 /** Must match LABOUR_RATE_CENTS in lib/money.ts, or margins will not reconcile. */
 const LABOUR_RATE = 9500;
 
+const HOUR = 3_600_000;
 const MONTHS_BACK = 12;
-const NOW = new Date("2026-09-15T00:00:00Z");
+/** Midnight today, business time — so the demo is always "now". */
+const NOW = startOfDay(new Date());
 const daysAgo = (d: number) => new Date(NOW.getTime() - d * 86_400_000);
 
 async function main() {
@@ -96,6 +106,7 @@ async function main() {
   await db.scheduleEvent.deleteMany();
   await db.stockMovement.deleteMany();
   await db.orderLine.deleteMany();
+  await db.orderStage.deleteMany();
   await db.order.deleteMany();
   await db.customer.deleteMany();
   await db.offcut.deleteMany();
@@ -206,15 +217,20 @@ async function main() {
     const pipeline: Pipeline = chance(0.75) ? "SHORT" : "FULL";
     const jobType = pipeline === "SHORT" ? pick(SHORT_JOBS) : pick(FULL_JOBS);
     const customer = pick(customers);
-    const createdAt = daysAgo(int(1, MONTHS_BACK * 30));
+    // Weighted toward recent work: spread evenly over the year, only a
+    // handful of jobs are ever live at once and the board reads as empty.
+    const createdAt = daysAgo(chance(0.3) ? int(1, 20) : int(1, MONTHS_BACK * 30));
 
     // Older jobs are more likely to be finished.
     const ageDays = Math.round((NOW.getTime() - createdAt.getTime()) / 86_400_000);
     const r = rnd();
     let status: OrderStatus;
-    if (ageDays > 60) status = r < 0.82 ? "COMPLETE" : "LOST";
-    else if (ageDays > 21) status = r < 0.55 ? "COMPLETE" : r < 0.72 ? "LOST" : pick(pipeline === "SHORT" ? (["WON", "CUTTING"] as const) : (["TEMPLATED", "FABRICATING", "SCHEDULED"] as const));
-    else status = r < 0.3 ? "ENQUIRY" : r < 0.55 ? "QUOTED" : r < 0.75 ? "WON" : pick(pipeline === "SHORT" ? (["CUTTING", "COMPLETE"] as const) : (["TEMPLATED", "SCHEDULED", "INSTALLED"] as const));
+    if (ageDays > 60) status = r < 0.86 ? FINAL_STAGE : "LOST";
+    else if (ageDays > 21) status = r < 0.4 ? FINAL_STAGE : r < 0.55 ? "LOST"
+      : pick(["PURCHASE_ORDER", "MEASURED", "DETAILS", "FACTORY"] as const);
+    else status = r < 0.25 ? "INITIAL" : r < 0.4 ? "QUOTE_REQUEST" : r < 0.55 ? "QUOTED"
+      : r < 0.7 ? "ORDER_ACTIVE"
+      : pick(["PURCHASE_ORDER", "MEASURED", "DETAILS", "FACTORY", "READY_FOR_DISPATCH", "INSTALLATION"] as const);
 
     const isOffcutJob = jobType === "OFFCUT_PROJECT";
     const sqm = isOffcutJob ? Number((0.3 + rnd() * 1.1).toFixed(2))
@@ -241,8 +257,30 @@ async function main() {
       material.costPerSqmCents * (isOffcutJob ? 0.55 + rnd() * 0.25 : 1.9 + rnd() * 0.8),
     );
     const quoteCents = Math.round(sqm * rate + hours * LABOUR_RATE + int(4000, 18000));
-    const won = ["WON","CUTTING","TEMPLATED","FABRICATING","SCHEDULED","INSTALLED","COMPLETE"].includes(status);
-    const done = status === "COMPLETE";
+    const won = status !== "LOST" && STAGES.indexOf(status) >= STAGES.indexOf("ORDER_ACTIVE");
+    const done = status === FINAL_STAGE;
+
+    /*
+     * When a job still in flight last moved.
+     *
+     * Age alone used to decide status, which left jobs parked mid-flow for two
+     * months — past every threshold on the follow-up board, so every card
+     * showed red and the one distinction the board draws could not be seen. A
+     * working business is mostly on top of its live jobs with a few
+     * stragglers: roughly seven in ten inside three days, two slipping past
+     * it, one genuinely stalled.
+     */
+    const q = rnd();
+    const stageDays = done || status === "LOST"
+      ? 0
+      : q < 0.7 ? int(0, 2) : q < 0.9 ? int(3, 4) : int(5, 12);
+    const stageAt = daysAgo(stageDays);
+    const liveWonAt = won && !done ? stageAt : null;
+    const liveCreatedAt = done || status === "LOST"
+      ? createdAt
+      : won
+        ? new Date(stageAt.getTime() - int(2, 20) * 86_400_000)  // the enquiry came first
+        : stageAt;
 
     jobNo++;
     const order = await db.order.create({
@@ -255,13 +293,66 @@ async function main() {
         depositCents: won ? Math.round(quoteCents * 0.3) : 0,
         estimatedHours: hours,
         actualHours: done ? Number((hours * (0.85 + rnd() * 0.4)).toFixed(1)) : 0,
-        createdAt,
-        wonAt: won ? new Date(createdAt.getTime() + int(1, 9) * 86_400_000) : null,
+        createdAt: liveCreatedAt,
+        wonAt: liveWonAt ?? (won ? new Date(createdAt.getTime() + int(1, 9) * 86_400_000) : null),
         completedAt: done ? new Date(createdAt.getTime() + int(10, 40) * 86_400_000) : null,
         lostReason: status === "LOST" ? pick(["Went with a cheaper quote","Renovation postponed","No reply after quote","Wanted a full slab"] as const) : null,
       },
     });
     orders.push(order);
+
+    /*
+     * The stage history behind that status.
+     *
+     * Walked forward from the first stage to where the job actually is, so the
+     * timeline has real spells to measure rather than one row. Earlier stages
+     * get a share of the time between the job arriving and entering its current
+     * stage; the current one is left open, which is what marks it as live.
+     */
+    {
+      /*
+       * The stage history behind that status.
+       *
+       * Walked forward from the first stage to where the job actually is, so
+       * the timeline has real spells to measure rather than one row.
+       *
+       * The earlier spells are fitted into the window between the job arriving
+       * and entering its current stage, and the open spell starts exactly at
+       * stageAt. Accumulating arbitrary spans instead let the open spell drift
+       * to wherever the sum landed, so the deliberate spread above — most jobs
+       * inside three days — never reached the board.
+       */
+      const reached = status === "LOST" ? STAGES.indexOf("QUOTED") : STAGES.indexOf(status);
+      const settled = done || status === "LOST";
+      const endOfRun = settled ? (order.completedAt ?? stageAt) : stageAt;
+      const window = Math.max(HOUR, endOfRun.getTime() - liveCreatedAt.getTime());
+
+      // Random weights, normalised, so the earlier stages fill the window
+      // exactly however many of them there are.
+      const weights = Array.from({ length: Math.max(1, reached) }, () => 0.3 + rnd());
+      const sum = weights.reduce((a, w) => a + w, 0);
+
+      let at = liveCreatedAt.getTime();
+      for (let k = 0; k <= reached; k++) {
+        const last = k === reached;
+        const enteredAt = new Date(at);
+        const open = last && !settled;
+        const span = last
+          ? (settled ? Math.max(HOUR, endOfRun.getTime() - at) : 0)
+          : Math.round((weights[k] / sum) * window);
+
+        await db.orderStage.create({
+          data: {
+            orderId: order.id,
+            stage: STAGES[k],
+            enteredAt,
+            exitedAt: open ? null : new Date(at + span),
+            movedById: pick(staff).id,
+          },
+        });
+        at += span;
+      }
+    }
 
     // One line, referencing the stock chosen above, so the movement log and the
     // margin both point at the same physical piece.
@@ -293,15 +384,22 @@ async function main() {
   }
 
   // ---- schedule ----------------------------------------------------------
-  const schedulable = orders.filter((o) =>
-    ["WON","CUTTING","TEMPLATED","FABRICATING","SCHEDULED","INSTALLED","COMPLETE"].includes(o.status));
+  // Anything the office has committed to: from the order going active onward.
+  // This listed the old status names and silently matched nothing, which left
+  // the schedule empty — hence the count assertion below.
+  const schedulable = orders.filter(
+    (o) => o.status !== "LOST" && STAGES.indexOf(o.status) >= STAGES.indexOf("ORDER_ACTIVE"),
+  );
   let events = 0;
   for (const o of schedulable.slice(0, 60)) {
     const kinds: EventKind[] = o.pipeline === "FULL" ? ["TEMPLATE", "INSTALL"] : ["INSTALL"];
     for (const kind of kinds) {
       const base = o.wonAt ?? o.createdAt;
-      const start = new Date(base.getTime() + int(2, 25) * 86_400_000);
-      start.setUTCHours(int(7, 13), chance(0.5) ? 0 : 30, 0, 0);
+      // A working day in the business's own zone, not the server's. Setting
+      // UTC hours here put every demo job between 5:30pm and 11:30pm once
+      // BUSINESS_TIMEZONE was honoured on the screens.
+      const day = zonedParts(new Date(base.getTime() + int(2, 25) * 86_400_000));
+      const start = zonedTime(day.year, day.month, day.day, int(7, 15), chance(0.5) ? 0 : 30);
       const ev = await db.scheduleEvent.create({
         data: {
           orderId: o.id, kind, startAt: start,
@@ -334,7 +432,7 @@ async function main() {
     orders: await db.order.count(),
     ordersShort: await db.order.count({ where: { pipeline: "SHORT" } }),
     ordersFull: await db.order.count({ where: { pipeline: "FULL" } }),
-    complete: await db.order.count({ where: { status: "COMPLETE" } }),
+    complete: await db.order.count({ where: { status: FINAL_STAGE } }),
     lines: await db.orderLine.count(),
     movements: await db.stockMovement.count(),
     events,

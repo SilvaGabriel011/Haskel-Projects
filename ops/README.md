@@ -21,8 +21,158 @@ The two deploy independently and neither can break the other.
 | — | Settings (people and access) | Done |
 | 8a | Booking requests from the website | Done |
 | 8b | Calendar sync on accept | **Wired, waiting on credentials** |
+| 9 | Putting stock on the rack by hand | Done |
+| 10 | Follow-up board (overdue, missing detail) | Done |
+| 11 | Eleven stages and the stage timeline | Done |
+| 12 | Grouping jobs that are near each other | Done |
 
 Every screen now runs on real (seeded) data. No shells left.
+
+## The eleven stages
+
+Every job runs the same eleven stages, taken verbatim from the Tekton flow so
+the two systems line up:
+
+**Initial Stage → Quote Request → Quoted → Order Active → Purchase Order →
+Measured → Details → Factory → Ready For Dispatch → Installation → Invoice**
+
+Plus `LOST`, which is not a stage: a job abandoned before the order went active.
+
+This replaced a two-pipeline design — a short run for offcut work, a long one
+for benchtop installs. One flow for everything makes every job's timings
+comparable and keeps the stages the same across projects, which is the point.
+The cost, accepted deliberately: an offcut vanity top still passes through
+Purchase Order and Factory, which on small work are often a few minutes each.
+
+`pipeline` survives on the order as a **classification**, not a stage list —
+the financials still split revenue between offcut/small work and benchtop
+installs.
+
+Quoting, activating the order, raising the purchase order, invoicing and
+writing a job off stay with the office. An installer moves work along the
+bench: measured, details, factory, out the door, installed.
+
+## The stage timeline
+
+Every move writes an `OrderStage` row — which stage, when it was entered, when
+it was left, and who moved it. The row with no exit time is where the job is
+now. **Status alone says where a job is, never how long it has been there**,
+which is the question both the timeline and the follow-up board exist to answer.
+
+On a job you get: total job time, the current stage with how long it has been
+running, the longest stage, how many of the eleven are done, then the numbered
+track — hours and days in each stage, in and out times, who moved it — and a
+bar showing where the time actually went.
+
+Hours are **calendar time, not working time**. A job sitting over a weekend has
+genuinely sat over the weekend, and pretending otherwise flatters the numbers.
+
+The move and its history are written in one transaction. If closing the old
+spell and opening the new one could come apart, a job would be counted in two
+stages at once or in none, and every figure would be wrong from then on.
+
+## Jobs that are near each other
+
+The system stores a suburb as free text and an address as a free line — there
+are no coordinates anywhere. So "which jobs are close together" cannot be
+answered from the data as stored.
+
+`lib/suburbs.ts` is the smallest thing that answers it: a built-in table of
+Adelaide suburbs with one approximate centre point each. It ships with the app
+— **no API key, no cost per lookup, no network call and no failure mode.**
+
+Two places use it:
+
+- **The follow-up board** puts a line on a card: *"3 others within 5 km"*.
+- **The schedule** groups the week into runs above the grid, each one naming
+  its suburbs and how far apart the furthest two are.
+
+Things worth knowing:
+
+- **A suburb it does not recognise is not an error.** That job shows everywhere
+  as normal and simply never groups. The schedule says how many were left out
+  rather than quietly dropping them.
+- **It reads what people actually type.** `Prospect`, `prospect`,
+  `Prospect SA`, `Prospect, SA 5082` all reach the same place. Without that,
+  grouping silently stops working on real data and looks like a broken feature.
+- **Runs count visits, not jobs.** A job with a template on Tuesday and an
+  install on Wednesday is two separate trips, so it appears twice — the label
+  says `3 visits · 2 jobs` rather than pretending it is three customers.
+- **It does not suggest a driving order.** That would look precise while being
+  guesswork: the table places a suburb, not a house, and the difference between
+  two addresses in one suburb is exactly what it cannot see. Grouping is the
+  honest limit of this data.
+- **Adding a suburb is adding a row** to `SUBURBS`. A centroid being slightly
+  off only changes whether two jobs group; it cannot make any other figure in
+  the system wrong.
+
+Both roles see this — where jobs are is not money.
+
+## The follow-up board
+
+`/orders` answers "where is everything". `/board` answers the different
+question of **what is going wrong**, and is the screen to open each morning.
+
+Every job still in flight gets a card, coloured by the worse of two signals:
+
+- **How long it has sat in its current stage**, read from the stage history:
+  **over three days is amber, over five is red**. One pair of numbers everyone
+  knows, shared with the timeline so the two can never disagree.
+- **What the office is missing.** No phone number, no site address on a won
+  job, nothing on the cut list — each card lists the gaps in words. Blocking
+  gaps (the job cannot proceed) are red; the rest are amber.
+
+A booked date that has come and gone with the job unfinished is red on its own.
+
+Two things worth knowing:
+
+- **It sees through placeholders.** `acceptBooking` writes "To confirm on the
+  call" into the address, which is a real string in a required column — so a
+  job can look complete while nobody knows where to drive. `TBC`, `n/a`,
+  `unknown` and `---` count as blank too.
+- **It does not cry wolf.** A fresh enquiry is *allowed* to have no address and
+  no cut list; those only become gaps once the job is won. A board that flags
+  everything gets ignored.
+
+Filters across the top narrow to what needs a look, what is overdue, what is
+missing detail, or what has a date gone by — each with a count.
+
+An employee sees the board but never a money gap: `quoteCents` is not read for
+them, and `lib/board.ts` treats absent as "not my business" rather than as
+zero, so they are never shown something they cannot see or fix.
+
+The rules are in `lib/board.ts`, free of the database and unit tested — the
+thresholds are judgement calls, and they belong somewhere they can be read and
+argued with rather than buried in a component.
+
+## Putting stock on the rack
+
+**Add stock** on `/stock` opens a short wizard: what you are adding, the
+material, the piece itself, then a page that reads it all back before anything
+is written. Three things go in this way — a slab, an offcut, or a consumable.
+
+Admin only, and asserted in the action rather than assumed from the page: a
+server action is its own endpoint and can be called without the modal ever
+being opened. Every branch either records a cost or creates a material with a
+cost per m², and money is admin-only throughout.
+
+A few decisions worth knowing:
+
+- **A new material can be created alongside the first slab that uses it**, so
+  an empty database is not a dead end. With nothing on file the wizard says so
+  and goes straight to the new-material fields.
+- **Offcuts carry no cost of their own.** What one is worth follows from its
+  material and the slab it came off, so there is no figure to type in wrong.
+- **References are never reused.** `nextRef` takes the highest number in use
+  rather than the count, so deleting `SLB-0003` cannot hand its number to a
+  different slab later — people write these on the stone itself.
+- **Every add writes a `RECEIVED` movement** naming what arrived and who put it
+  there, so the log on `/stock` stays complete.
+- **Amounts are parsed, not rounded.** `10.005` is refused rather than guessed
+  at; `$1,200.50` is accepted. Money stays integer cents the whole way.
+
+The rules live in `lib/stock-input.ts`, free of the database so they are unit
+tested directly rather than only by clicking through the modal.
 
 ## The one public route
 
@@ -67,7 +217,7 @@ npm run dev           # http://localhost:3000
 ```bash
 npm run typecheck     # tsc, no emit
 npm run lint
-npm test              # 61 unit tests — query layer, pipeline rules, seed integrity
+npm test              # 222 unit tests — query layer, pipeline rules, seed integrity, input rules
 npm run build         # full production build
 ```
 
@@ -75,13 +225,17 @@ npm run build         # full production build
 and takes the demo passwords from the environment so none are hardcoded:
 
 ```bash
-npm run dev &                                   # or point E2E_BASE_URL elsewhere
+npm run dev -- -p 3111 &                        # the port playwright.config.ts expects
 E2E_ADMIN_PASSWORD=... E2E_INSTALLER_PASSWORD=... npm run test:e2e
 ```
 
-21 tests: every route's landing place signed out and per role, the absence of
-any dollar amount on employee pages, and that adding `?who=` to the schedule
-does not widen what an employee sees.
+28 tests: every route's landing place signed out and per role, the absence of
+any dollar amount on employee pages, that adding `?who=` to the schedule does
+not widen what an employee sees, and that `/book` opens without signing in.
+
+The port matters. `playwright.config.ts` defaults to **3111**, so a server on
+3000 fails all 26 with `ERR_CONNECTION_REFUSED` — which looks exactly like a
+real regression. Either use the flag above or set `E2E_BASE_URL`.
 
 `@playwright/test` is pinned to **1.56.1** to match the preinstalled browsers.
 Bumping it without matching browsers fails with "Executable doesn't exist".
@@ -92,7 +246,9 @@ Two roles, defined once in `lib/roles.ts` and read by everything else.
 
 | | Admin | Employee |
 |---|---|---|
-| Stock, offcuts, orders, schedule | yes | yes |
+| Stock, offcuts, orders, schedule, follow-up board | yes | yes |
+| Adding stock | yes | **no** |
+| Booking requests from the website | yes | **no** |
 | Cost prices, quotes, margins | yes | **no** |
 | Financial dashboards | yes | **no** |
 | Settings and people | yes | **no** |
@@ -183,7 +339,7 @@ public site from `haskel-site/`.
 6. Copy the client ID and secret into `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`
 7. `GOOGLE_WORKSPACE_DOMAIN` is already set to `haskelproject.com.au`
 8. For calendar sync, also set `GOOGLE_CALENDAR_ID` (a throwaway calendar
-   first) and `BUSINESS_TIMEZONE` (an IANA zone such as `Australia/Perth`).
+   first) and `BUSINESS_TIMEZONE` (`Australia/Adelaide`).
    Sync stays off until both are set, rather than guessing a timezone.
 
 **In production, Google sign-in is refused until `GOOGLE_WORKSPACE_DOMAIN` is
@@ -208,6 +364,12 @@ ops/
 │   ├── guard.ts       server-side assertions used by every protected page
 │   ├── staff.ts       staff lookups, backed by the User table
 │   ├── pipeline.ts    the two pipelines, legal transitions, shared phase mapping
+│   ├── stock-input.ts what may go on the rack — pure rules, unit tested
+│   ├── board.ts       follow-up thresholds and missing-detail rules
+│   ├── stage-timing.ts   how long each stage took, and where the time went
+│   ├── suburbs.ts     Adelaide suburb centroids, and reading a typed suburb
+│   ├── routes.ts      grouping jobs that are near each other
+│   ├── business-time.ts  days, weeks and months in the business's zone
 │   ├── queries/       role-aware reads — the money never leaves the server
 │   └── google-calendar.ts  booking → calendar event (sync pending credentials)
 ├── app/

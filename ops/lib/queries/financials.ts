@@ -17,6 +17,7 @@
  */
 import { formatDate, monthKey, monthStart } from "@/lib/business-time";
 import { db } from "@/lib/db";
+import { FINAL_STAGE } from "@/lib/pipeline";
 import { LABOUR_RATE_CENTS, marginCents } from "@/lib/money";
 
 const MONTHS = 12;
@@ -45,7 +46,7 @@ type CompletedJob = {
 
 async function completedSince(from: Date): Promise<CompletedJob[]> {
   return db.order.findMany({
-    where: { status: "COMPLETE", completedAt: { gte: from } },
+    where: { status: FINAL_STAGE, completedAt: { gte: from } },
     select: {
       id: true, jobNumber: true, completedAt: true, pipeline: true, jobType: true,
       quoteCents: true, actualHours: true, estimatedHours: true,
@@ -110,7 +111,7 @@ export async function revenueSeries(from = monthsBack()) {
 export async function summary(from = monthsBack()) {
   const [jobs, quoted, lost, stock] = await Promise.all([
     completedSince(from),
-    db.order.count({ where: { createdAt: { gte: from }, status: { not: "ENQUIRY" } } }),
+    db.order.count({ where: { createdAt: { gte: from }, status: { not: "INITIAL" } } }),
     db.order.count({ where: { createdAt: { gte: from }, status: "LOST" } }),
     db.slab.aggregate({
       where: { status: { in: ["IN_STOCK", "RESERVED"] } },

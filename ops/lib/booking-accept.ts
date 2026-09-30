@@ -96,11 +96,12 @@ export async function acceptBookingRequest(input: {
           data: {
             jobNumber,
             customerId: customer.id,
-            // A measure is the front of the short pipeline; it moves to FULL
-            // later if it turns out to be a benchtop install.
+            // Small work by default; reclassified later if it turns out to be
+            // a benchtop install. The classification no longer changes the
+            // stages — every job runs all eleven.
             pipeline: "SHORT",
             jobType: req.jobType,
-            status: "ENQUIRY",
+            status: "INITIAL",
             address: "To confirm on the call",
             suburb: req.suburb,
             notes: req.notes,

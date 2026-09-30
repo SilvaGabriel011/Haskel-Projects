@@ -10,6 +10,7 @@
  * StockMovement, which is also how "held by which job" is answered.
  */
 import { db } from "@/lib/db";
+import { FINAL_STAGE } from "@/lib/pipeline";
 
 export type StockKind = "offcut" | "slab";
 
@@ -35,7 +36,7 @@ export async function reserveStock(input: {
 }): Promise<ReserveResult> {
   const order = await db.order.findUnique({ where: { id: input.orderId }, select: { status: true } });
   if (!order) return { ok: false, reason: "That job no longer exists." };
-  if (order.status === "COMPLETE" || order.status === "LOST") {
+  if (order.status === FINAL_STAGE || order.status === "LOST") {
     return { ok: false, reason: "That job is closed; stock cannot be held for it." };
   }
 

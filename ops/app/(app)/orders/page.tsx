@@ -34,7 +34,7 @@ export default async function OrdersPage({
 
   const [orders, counts] = await Promise.all([ordersBoard(user.role, pipeline), pipelineCounts()]);
 
-  const stages = STAGES[pipeline];
+  const stages = STAGES;
   // A board is for work in progress. Twelve months of finished jobs would
   // otherwise bury the columns you actually act on, so each column shows the
   // most recent few and says how many more there are.

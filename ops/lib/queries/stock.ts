@@ -199,3 +199,30 @@ export async function recentMovements(take = 12) {
     take,
   });
 }
+
+// ------------------------------------------------------- pickers for adding
+
+/**
+ * The material and slab lists the add-stock modal offers.
+ *
+ * Deliberately thin: just enough to tell two entries apart in a dropdown. No
+ * cost columns — the modal is admin-only, but there is no reason to ship a
+ * price to the browser when nothing renders it.
+ */
+export async function listMaterialOptions() {
+  return db.material.findMany({
+    select: { id: true, name: true, finish: true, thicknessMm: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/** Slabs an offcut can be recorded against — cut ones included, since that is
+ *  usually exactly where an offcut comes from. Sold ones are not. */
+export async function listSlabOptions() {
+  const slabs = await db.slab.findMany({
+    where: { status: { in: ["IN_STOCK", "RESERVED", "CUT"] } },
+    select: { id: true, ref: true, material: { select: { name: true } } },
+    orderBy: { ref: "asc" },
+  });
+  return slabs.map((s) => ({ id: s.id, ref: s.ref, materialName: s.material.name }));
+}

@@ -30,6 +30,10 @@ env:
   NODE_VERSION: "24"
   # Throwaway CI database, never a real one.
   DATABASE_URL: postgresql://haskel:haskel_ci@localhost:5432/haskel_ops
+  # Every job runs in the zone production runs in. Left unset, times fall back
+  # to the runner's UTC and the suite agrees with the very bug it should catch:
+  # two week tests passed only while this was absent.
+  BUSINESS_TIMEZONE: Australia/Adelaide
 
 jobs:
   site:
@@ -153,7 +157,6 @@ jobs:
       AUTH_TRUST_HOST: "true"
       AUTH_URL: http://localhost:3111
       GOOGLE_WORKSPACE_DOMAIN: haskelproject.com.au
-      BUSINESS_TIMEZONE: Australia/Perth
       E2E_BASE_URL: http://localhost:3111
     steps:
       - uses: actions/checkout@v4
