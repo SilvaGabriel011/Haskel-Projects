@@ -16,8 +16,9 @@
   --color-line: #e6dcd8;
   --color-muted: #9c9294;
 
-  --font-sans: "Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Playfair Display", Georgia, serif;
+  /* --font-poppins and --font-playfair are set by next/font in app/layout.tsx. */
+  --font-sans: var(--font-poppins), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-playfair), Georgia, serif;
 
   --radius-brand: 22px;
 }
