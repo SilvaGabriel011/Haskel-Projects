@@ -6,6 +6,7 @@
  * its own expose a page. Both layers read the same rules from lib/roles.
  */
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
 import { auth } from "@/auth";
 import { canAccess, isRole, type Role } from "@/lib/roles";
@@ -17,9 +18,19 @@ export type SignedInUser = {
   role: Role;
 };
 
+/**
+ * The session, read once per request.
+ *
+ * Reading it re-checks the person against the User table (auth.ts), and both
+ * the layout and the page ask — so without this every page looked the same
+ * person up twice. React's cache lasts one request, so a role change or a
+ * deactivation still applies on the very next one.
+ */
+const currentSession = cache(() => auth());
+
 /** The signed-in person, or a redirect to /login. Never returns null. */
 export async function requireUser(): Promise<SignedInUser> {
-  const session = await auth();
+  const session = await currentSession();
   const user = session?.user;
 
   if (!user?.email || !isRole(user.role)) {
