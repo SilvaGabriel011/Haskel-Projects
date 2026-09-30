@@ -65,3 +65,33 @@ test.describe("the menu on a phone", () => {
     await expect(page.locator("#app-menu")).toBeHidden();
   });
 });
+
+test.describe("the boards on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  // Side by side, the stages scrolled sideways inside a row as tall as the
+  // tallest column: one card, then a long empty gap. Stacked, every stage
+  // starts right where the one above it ends.
+  for (const route of ["/board?show=all", "/orders"]) {
+    test(`${route} stacks its stages with no gap between them`, async ({ page }) => {
+      await signIn(page);
+      await page.goto(route);
+      // The stage columns are the sections sharing the first one's container,
+      // not every headed section on the page (the colour legend has one too).
+      const boxes = await page.locator("main section:has(h2)").evaluateAll((els) =>
+        els
+          .filter((el) => el.parentElement === els[0].parentElement && el.getBoundingClientRect().height > 0)
+          .map((el) => {
+            const r = el.getBoundingClientRect();
+            return { top: r.top + window.scrollY, bottom: r.bottom + window.scrollY, left: r.left };
+          }),
+      );
+      expect(boxes.length).toBeGreaterThan(1);
+      for (let i = 1; i < boxes.length; i++) {
+        expect(boxes[i].left, "stages sit one above another").toBe(boxes[0].left);
+        expect(boxes[i].top - boxes[i - 1].bottom, "no gap between stages").toBeLessThanOrEqual(32);
+      }
+      await expect(page.getByText("Nothing here").first()).toBeHidden();
+    });
+  }
+});
