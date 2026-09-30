@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { db } from "@/lib/db";
-import { rateLimit, validateBooking } from "@/lib/booking";
+import { clientIp, rateLimit, trustedProxyHops, validateBooking } from "@/lib/booking";
 
 /**
  * The only unauthenticated write in the whole back office.
@@ -11,10 +11,10 @@ import { rateLimit, validateBooking } from "@/lib/booking";
  * turns that into anything real.
  */
 export async function POST(request: NextRequest) {
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown";
+  const ip = clientIp(request.headers, {
+    onVercel: Boolean(process.env.VERCEL),
+    trustedHops: trustedProxyHops(),
+  });
 
   const limit = rateLimit(ip);
   if (!limit.ok) {

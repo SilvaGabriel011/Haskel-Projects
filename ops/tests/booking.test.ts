@@ -5,7 +5,15 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, describe, it } from "node:test";
 
-import { _resetRateLimit, rateLimit, validateBooking, BOOKABLE } from "../lib/booking";
+import {
+  _resetRateLimit,
+  clientIp,
+  MAX_TRACKED,
+  rateLimit,
+  trustedProxyHops,
+  validateBooking,
+  BOOKABLE,
+} from "../lib/booking";
 import { db } from "../lib/db";
 
 after(async () => { await db.$disconnect(); });
@@ -116,6 +124,67 @@ describe("rate limiting", () => {
     for (let i = 0; i < 5; i++) rateLimit("1.2.3.4", t0);
     assert.equal(rateLimit("1.2.3.4", t0).ok, false);
     assert.equal(rateLimit("1.2.3.4", t0 + 61 * 60 * 1000).ok, true);
+  });
+
+  it("cannot be reset by flooding it with new addresses", () => {
+    // The map used to be emptied outright at its cap, the blocked sender's
+    // own count included. Only the quietest entries may go now.
+    const t0 = Date.now();
+    for (let i = 0; i < 5; i++) rateLimit("6.6.6.6", t0);
+    for (let i = 0; i < MAX_TRACKED + 10; i++) {
+      rateLimit(`10.${(i >> 16) & 255}.${(i >> 8) & 255}.${i & 255}`, t0 + 1);
+      // The blocked sender keeps trying throughout, as a real one would.
+      if (i % 1000 === 0) rateLimit("6.6.6.6", t0 + 1);
+    }
+    assert.equal(rateLimit("6.6.6.6", t0 + 2).ok, false, "still limited after the flood");
+  });
+});
+
+describe("who is asking", () => {
+  const h = (xff?: string, real?: string) =>
+    new Headers({ ...(xff ? { "x-forwarded-for": xff } : {}), ...(real ? { "x-real-ip": real } : {}) });
+
+  it("ignores the entry the client wrote itself behind one proxy", () => {
+    // The client sends "1.1.1.1"; our proxy appends the address it saw.
+    const ip = clientIp(h("1.1.1.1, 203.0.113.9"), { onVercel: false, trustedHops: 1 });
+    assert.equal(ip, "203.0.113.9");
+  });
+
+  it("gives a spoofer one bucket however many addresses they invent", () => {
+    const seen = new Set(
+      ["1.1.1.1", "2.2.2.2", "3.3.3.3"].map((fake) =>
+        clientIp(h(`${fake}, 203.0.113.9`), { onVercel: false, trustedHops: 1 }),
+      ),
+    );
+    assert.deepEqual([...seen], ["203.0.113.9"]);
+  });
+
+  it("counts in from the right when there are two proxies", () => {
+    const ip = clientIp(h("1.1.1.1, 198.51.100.4, 10.0.0.2"), { onVercel: false, trustedHops: 2 });
+    assert.equal(ip, "198.51.100.4");
+  });
+
+  it("trusts Vercel, which overwrites these headers itself", () => {
+    assert.equal(clientIp(h("198.51.100.4", "198.51.100.4"), { onVercel: true, trustedHops: 1 }), "198.51.100.4");
+    assert.equal(clientIp(h("198.51.100.4"), { onVercel: true, trustedHops: 1 }), "198.51.100.4");
+  });
+
+  it("trusts nothing when told there is no proxy", () => {
+    assert.equal(clientIp(h("1.1.1.1", "2.2.2.2"), { onVercel: false, trustedHops: 0 }), "unknown");
+  });
+
+  it("does not run off the front of a short list", () => {
+    assert.equal(clientIp(h("203.0.113.9"), { onVercel: false, trustedHops: 3 }), "unknown");
+    assert.equal(clientIp(h(), { onVercel: false, trustedHops: 1 }), "unknown");
+  });
+
+  it("reads TRUSTED_PROXY_HOPS as a whole number, one by default", () => {
+    assert.equal(trustedProxyHops(undefined), 1);
+    assert.equal(trustedProxyHops(""), 1);
+    assert.equal(trustedProxyHops("abc"), 1);
+    assert.equal(trustedProxyHops("-1"), 1);
+    assert.equal(trustedProxyHops("0"), 0);
+    assert.equal(trustedProxyHops("2"), 2);
   });
 });
 
