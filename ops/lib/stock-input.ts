@@ -11,6 +11,8 @@
  */
 import type { MaterialKind } from "@prisma/client";
 
+import { zonedTime } from "@/lib/business-time";
+
 export const STOCK_KINDS = ["SLAB", "OFFCUT", "CONSUMABLE"] as const;
 export type StockKind = (typeof STOCK_KINDS)[number];
 
@@ -179,12 +181,24 @@ function validateDims(f: Record<string, unknown>): { widthMm: number; lengthMm: 
   return { widthMm, lengthMm };
 }
 
-/** A date that is a real day and not years out. Stock arrives now, not in 2031. */
+/**
+ * A date that is a real day and not years out. Stock arrives now, not in 2031.
+ *
+ * Read as midnight on the business's calendar, not the server's: the server
+ * runs in UTC. And a day that does not exist is refused rather than rolled
+ * over — Date reads "2026-02-30" as 2 March without complaint.
+ */
 function validateArrived(v: unknown, now: Date): Date | string {
   const raw = str(v);
   if (!raw) return "Pick the day it arrived.";
-  const d = new Date(`${raw}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return "That date did not make sense.";
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "That date did not make sense.";
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) {
+    return "That date did not make sense.";
+  }
+  const d = zonedTime(year, month, day);
   const tenYears = 3650 * 86_400_000;
   if (d.getTime() > now.getTime() + 86_400_000) return "That date is in the future.";
   if (d.getTime() < now.getTime() - tenYears) return "That date is too far back.";

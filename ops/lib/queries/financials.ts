@@ -17,10 +17,13 @@
  */
 import { formatDate, monthKey, monthStart } from "@/lib/business-time";
 import { db } from "@/lib/db";
-import { FINAL_STAGE } from "@/lib/pipeline";
+import { FINAL_STAGE, STAGES, phase } from "@/lib/pipeline";
 import { LABOUR_RATE_CENTS, marginCents } from "@/lib/money";
 
 const MONTHS = 12;
+
+/** Every stage at or past an active order, the final one included. */
+const WON_STAGES = STAGES.filter((s) => phase(s) === "WON" || phase(s) === "COMPLETE");
 
 /** The 1st of the month `n` months ago, at midnight in the business zone. */
 export function monthsBack(n = MONTHS): Date {
@@ -109,9 +112,13 @@ export async function revenueSeries(from = monthsBack()) {
 
 /** The headline figures. */
 export async function summary(from = monthsBack()) {
-  const [jobs, quoted, lost, stock] = await Promise.all([
+  const [jobs, won, lost, stock] = await Promise.all([
     completedSince(from),
-    db.order.count({ where: { createdAt: { gte: from }, status: { not: "INITIAL" } } }),
+    // Won means it got as far as an active order. A quote still waiting on an
+    // answer is neither won nor lost, so it sits out of the rate entirely:
+    // counting it as won (as "not lost") made the rate look best exactly when
+    // the most quotes were still undecided.
+    db.order.count({ where: { createdAt: { gte: from }, status: { in: [...WON_STAGES] } } }),
     db.order.count({ where: { createdAt: { gte: from }, status: "LOST" } }),
     db.slab.aggregate({
       where: { status: { in: ["IN_STOCK", "RESERVED"] } },
@@ -131,7 +138,7 @@ export async function summary(from = monthsBack()) {
     marginPct: revenue > 0 ? Math.round((margin / revenue) * 1000) / 10 : 0,
     jobs: jobs.length,
     avgJobCents: jobs.length ? Math.round(revenue / jobs.length) : 0,
-    winRate: quoted > 0 ? Math.round(((quoted - lost) / quoted) * 1000) / 10 : 0,
+    winRate: won + lost > 0 ? Math.round((won / (won + lost)) * 1000) / 10 : 0,
     offcutRevenue,
     offcutShare: revenue > 0 ? Math.round((offcutRevenue / revenue) * 1000) / 10 : 0,
     stockValue: stock._sum.costCents ?? 0,

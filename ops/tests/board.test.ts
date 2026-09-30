@@ -6,7 +6,7 @@
  * read and argued with, rather than left implicit in a component.
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 
 import {
   ageTone,
@@ -22,7 +22,9 @@ import {
   type JobForBoard,
 } from "../lib/board";
 import { zonedTime } from "../lib/business-time";
+import { db } from "../lib/db";
 import { STAGES } from "../lib/pipeline";
+import { boardCards } from "../lib/queries/board";
 
 const NOW = zonedTime(2026, 9, 29, 9, 0);
 const daysBefore = (n: number) => zonedTime(2026, 9, 29 - n, 9, 0);
@@ -44,7 +46,7 @@ function job(over: Partial<JobForBoard> = {}): JobForBoard {
     wonAt: daysBefore(1),
     stageEnteredAt: daysBefore(1),
     completedAt: null,
-    nextEventAt: null,
+    lastEventAt: null,
     ...over,
   };
 }
@@ -182,14 +184,14 @@ describe("a card", () => {
   });
 
   it("goes red when a booked date has come and gone", () => {
-    const c = toCard(job({ status: "INSTALLATION", stageEnteredAt: daysBefore(2), nextEventAt: daysBefore(3) }), NOW);
+    const c = toCard(job({ status: "INSTALLATION", stageEnteredAt: daysBefore(2), lastEventAt: daysBefore(3) }), NOW);
     assert.equal(c.datePassed, true);
     assert.equal(c.tone, "late");
   });
 
   it("does not flag a booking that is still ahead", () => {
     const ahead = zonedTime(2026, 10, 6, 9, 0);
-    const c = toCard(job({ status: "INSTALLATION", stageEnteredAt: daysBefore(1), nextEventAt: ahead }), NOW);
+    const c = toCard(job({ status: "INSTALLATION", stageEnteredAt: daysBefore(1), lastEventAt: ahead }), NOW);
     assert.equal(c.datePassed, false);
   });
 
@@ -204,7 +206,7 @@ describe("filters", () => {
     toCard(job({ id: "a", stageEnteredAt: daysBefore(1) }), NOW), // ok
     toCard(job({ id: "b", customer: { ...COMPLETE_CUSTOMER, email: null }, stageEnteredAt: daysBefore(1) }), NOW), // warn, missing
     toCard(job({ id: "c", status: "INITIAL", stageEnteredAt: daysBefore(9) }), NOW), // late by age
-    toCard(job({ id: "d", status: "INSTALLATION", stageEnteredAt: daysBefore(1), nextEventAt: daysBefore(2) }), NOW), // date passed
+    toCard(job({ id: "d", status: "INSTALLATION", stageEnteredAt: daysBefore(1), lastEventAt: daysBefore(2) }), NOW), // date passed
   ];
 
   it("shows everything, or only what needs a look", () => {
@@ -245,5 +247,50 @@ describe("columns", () => {
       if (s === "INVOICE") continue;
       assert.ok(columnsFor().includes(s), `${s} has no column`);
     }
+  });
+});
+
+describe("the board query", () => {
+  const TAG = `board-${Date.now()}`;
+  after(async () => {
+    await db.order.deleteMany({ where: { jobNumber: TAG } });
+    await db.customer.deleteMany({ where: { name: TAG } });
+    await db.$disconnect();
+  });
+
+  it("does not call a job late while its install is still ahead", async () => {
+    // The template visit is behind us, the install is tomorrow. Reading the
+    // soonest event saw only the template and flagged the job "date passed".
+    const hour = 3_600_000;
+    const now = Date.now();
+    const customer = await db.customer.create({
+      data: { name: TAG, phone: "0400000001", email: "t@example.com", suburb: "Prospect", source: "PHONE" },
+    });
+    const order = await db.order.create({
+      data: {
+        jobNumber: TAG, customerId: customer.id, pipeline: "FULL", jobType: "FULL_BENCHTOP",
+        status: "ORDER_ACTIVE", address: "1 Test St", suburb: "Prospect",
+        events: {
+          create: [
+            { kind: "TEMPLATE", startAt: new Date(now - 26 * hour), endAt: new Date(now - 25 * hour), address: "1 Test St" },
+            { kind: "INSTALL", startAt: new Date(now + 24 * hour), endAt: new Date(now + 27 * hour), address: "1 Test St" },
+          ],
+        },
+      },
+    });
+
+    const card = (await boardCards("ADMIN")).find((c) => c.id === order.id);
+    assert.ok(card, "the job should be on the board");
+    assert.equal(card.datePassed, false);
+
+    // Once the install date itself has gone, it is late.
+    await db.scheduleEvent.updateMany({
+      where: { orderId: order.id, kind: "INSTALL" },
+      data: { startAt: new Date(now - 3 * hour), endAt: new Date(now - 2 * hour) },
+    });
+    const later = (await boardCards("ADMIN")).find((c) => c.id === order.id);
+    assert.equal(later?.datePassed, true);
+
+    await db.scheduleEvent.deleteMany({ where: { orderId: order.id } });
   });
 });

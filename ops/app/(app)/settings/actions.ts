@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/guard";
-import type { Role } from "@/lib/roles";
+import { isRole, type Role } from "@/lib/roles";
 
 /**
  * Changing who can see what.
@@ -25,6 +25,9 @@ async function wouldLeaveNoAdmin(userId: string): Promise<boolean> {
 
 export async function setRole(userId: string, role: Role) {
   const me = await requireAdmin();
+
+  // The type is only a promise the caller made; a server action takes anything.
+  if (!isRole(role)) return { ok: false as const, reason: "That is not a role." };
 
   if (userId === me.id && role !== "ADMIN") {
     return { ok: false as const, reason: "You cannot take admin away from yourself." };

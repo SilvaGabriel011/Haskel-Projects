@@ -158,8 +158,12 @@ export type JobForBoard = JobForGaps & {
    * Null only for a job with no history at all, which falls back to createdAt.
    */
   stageEnteredAt: Date | null;
-  /** Soonest booked event, to spot a date that has come and gone. */
-  nextEventAt: Date | null;
+  /**
+   * The latest booked event. Only when even that one is behind us has the date
+   * come and gone: a template done this morning with the install booked for
+   * tomorrow is on track, not late.
+   */
+  lastEventAt: Date | null;
 };
 
 export type BoardCard = {
@@ -201,7 +205,7 @@ export function toCard(job: JobForBoard, now = new Date()): BoardCard {
 
   const gaps = gapsFor(job);
   const datePassed =
-    !settled && job.nextEventAt !== null && job.nextEventAt.getTime() < now.getTime();
+    !settled && job.lastEventAt !== null && job.lastEventAt.getTime() < now.getTime();
 
   const age = ageTone(job.status, daysInStage);
   const gt = gapTone(gaps);

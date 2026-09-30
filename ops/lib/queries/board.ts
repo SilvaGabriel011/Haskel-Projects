@@ -28,11 +28,13 @@ const SHARED = {
   completedAt: true,
   customer: { select: { name: true, phone: true, email: true } },
   _count: { select: { lines: true } },
-  // The soonest booking, to spot a date that has come and gone. One row per
-  // order, so this stays a single query rather than one per card.
+  // The latest booking, to spot a date that has come and gone. Not the
+  // soonest: that is usually the template visit, long past while the install
+  // is still ahead, and it flagged every such job as late. One row per order,
+  // so this stays a single query rather than one per card.
   events: {
     select: { startAt: true },
-    orderBy: { startAt: "asc" },
+    orderBy: { startAt: "desc" },
     take: 1,
   },
   // The open spell is the stage the job is in now, and when it got there.
@@ -62,7 +64,7 @@ function base(r: SharedRow): Omit<JobForBoard, "quoteCents"> {
     completedAt: r.completedAt,
     lineCount: r._count.lines,
     customer: r.customer,
-    nextEventAt: r.events[0]?.startAt ?? null,
+    lastEventAt: r.events[0]?.startAt ?? null,
     stageEnteredAt: r.stages[0]?.enteredAt ?? null,
   };
 }
