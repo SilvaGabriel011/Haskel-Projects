@@ -31,6 +31,9 @@ model User {
   role      Role     @default(EMPLOYEE)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+  /// When they finished the first-login walkthrough (/welcome). Null means
+  /// the dashboard sends them there once.
+  onboardedAt DateTime?
 
   movements StockMovement[]
   shifts    ScheduleAssignee[]

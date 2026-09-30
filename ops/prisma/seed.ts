@@ -117,8 +117,9 @@ async function main() {
 
   // ---- people -----------------------------------------------------------
   const staff = await Promise.all([
-    db.user.create({ data: { email: "admin@haskelproject.com.au",      name: "Gabriel Silva", role: "ADMIN" } }),
-    db.user.create({ data: { email: "installer@haskelproject.com.au",  name: "Dave Whitlock", role: "EMPLOYEE" } }),
+    db.user.create({ data: { email: "admin@haskelproject.com.au",      name: "Gabriel Silva", role: "ADMIN", onboardedAt: new Date() } }),
+    db.user.create({ data: { email: "installer@haskelproject.com.au",  name: "Dave Whitlock", role: "EMPLOYEE", onboardedAt: new Date() } }),
+    // A new starter: signing in as Sam shows the first-login walkthrough.
     db.user.create({ data: { email: "apprentice@haskelproject.com.au", name: "Sam Reid",      role: "EMPLOYEE" } }),
   ]);
   const [admin] = staff;

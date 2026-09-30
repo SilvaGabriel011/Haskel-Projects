@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { signOut } from "@/auth";
 import { DemoBanner } from "@/components/demo-banner";
 import { MobileMenu } from "@/components/mobile-menu";
@@ -46,8 +48,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               {isAdmin ? "Admin" : "Employee"}
             </span>
 
+            <Link
+              href="/welcome"
+              className="mt-4 block text-xs font-semibold text-ink-2 underline underline-offset-4 hover:text-rose"
+            >
+              Getting started
+            </Link>
+
             <form
-              className="mt-4"
+              className="mt-3"
               action={async () => {
                 "use server";
                 await signOut({ redirectTo: "/login" });
