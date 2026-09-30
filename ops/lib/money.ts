@@ -2,11 +2,17 @@
  * Money is integer cents everywhere. These are the only places it becomes a
  * string, and it never becomes a float in between.
  */
-export function formatAud(cents: number): string {
+
+/**
+ * `alwaysCents` is for a column of figures. Dropping ".00" from round amounts
+ * reads well in a sentence, but in a right-aligned column "$1,632" beside
+ * "$3,074.40" no longer lines up.
+ */
+export function formatAud(cents: number, opts: { alwaysCents?: boolean } = {}): string {
   return new Intl.NumberFormat("en-AU", {
     style: "currency",
     currency: "AUD",
-    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    minimumFractionDigits: opts.alwaysCents || cents % 100 !== 0 ? 2 : 0,
   }).format(cents / 100);
 }
 

@@ -152,7 +152,10 @@ export default async function StockPage({
                     <td className="px-5 py-3 font-medium">{s.rack}</td>
                     <td className="px-5 py-3 tabular-nums">{s._count.offcuts || "—"}</td>
                     {isAdmin && "costCents" in s ? (
-                      <td className="px-5 py-3 text-right tabular-nums">{formatAud(s.costCents)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums">
+                        {/* Always with cents: "$1,632" beside "$3,074.40" does not line up. */}
+                        {formatAud(s.costCents, { alwaysCents: true })}
+                      </td>
                     ) : null}
                     <td className="px-5 py-3">
                       <Pill tone={SLAB_TONE[s.status]}>{SLAB_LABEL[s.status]}</Pill>

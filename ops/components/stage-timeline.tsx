@@ -1,4 +1,5 @@
 import { Card, SectionTitle } from "@/components/ui";
+import { formatDate } from "@/lib/business-time";
 import { STAGE_LABEL } from "@/lib/pipeline";
 import {
   TIMING_LABEL,
@@ -37,8 +38,10 @@ const BAR: Record<TimingTone, string> = {
   live: "bg-[#2f5b8a]",
 };
 
+// In the business's zone: this renders on the server, which runs in UTC, and
+// a 9:30am move in Adelaide used to read "00:00".
 function when(d: Date) {
-  return d.toLocaleString("en-AU", {
+  return formatDate(d, {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",

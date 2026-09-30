@@ -106,7 +106,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </section>
       ) : null}
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-[1.4fr_1fr]">
         <section>
           <SectionTitle>Cut list</SectionTitle>
           {order.lines.length === 0 ? (

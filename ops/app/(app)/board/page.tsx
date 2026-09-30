@@ -45,7 +45,7 @@ function JobCard({ card, nearby }: { card: BoardCard; nearby: number }) {
   return (
     <Link
       href={`/orders/${card.id}`}
-      className={`block rounded-[14px] border border-line bg-white p-4 transition hover:-translate-y-0.5 hover:border-rose hover:shadow-lg ${EDGE[card.tone]}`}
+      className={`relative block rounded-[14px] border border-line bg-white p-4 transition hover:-translate-y-0.5 hover:border-rose hover:shadow-lg ${EDGE[card.tone]}`}
     >
       <div className="flex items-start justify-between gap-2">
         <span className="text-xs font-semibold tabular-nums text-rose">{card.jobNumber}</span>
@@ -234,16 +234,16 @@ export default async function BoardPage({
                   {t === "ok"
                     ? "Moving along, and the office has what it needs."
                     : t === "warn"
-                      ? "Sitting longer than usual for this stage, or missing something that can wait."
-                      : "Well past time for its stage, a booked date gone by, or missing something that stops the job."}
+                      ? "Three days or more in this stage, or missing something that can wait."
+                      : "Five days or more in this stage, a booked date gone by, or missing something that stops the job."}
                 </p>
               </div>
             </div>
           ))}
         </Card>
         <p className="mt-3 text-xs text-muted">
-          Days are counted in the stage a job is in, and the thresholds differ by stage — an
-          enquiry goes amber after two days, fabrication after ten. A colour is never the only
+          Days are counted in the stage a job is in, the same for every stage: amber after
+          three days, red after five. A colour is never the only
           signal: every card also says in words what is wrong.{" "}
           <Pill tone={TONE_PILL.late}>red</Pill> on a detail means the job cannot proceed without it.
         </p>

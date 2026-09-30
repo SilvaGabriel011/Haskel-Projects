@@ -50,7 +50,7 @@ export function RevenueBars({ data }: { data: RevenueMonth[] }) {
       </div>
 
       <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Revenue by month, split by pipeline" style={{ minWidth: 620, width: "100%", height: "auto" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} role="group" aria-label="Revenue by month, split by pipeline" style={{ minWidth: 620, width: "100%", height: "auto" }}>
           {/* recessive grid */}
           {ticks.map((t) => (
             <g key={t}>
@@ -72,9 +72,17 @@ export function RevenueBars({ data }: { data: RevenueMonth[] }) {
             return (
               <g
                 key={d.month + i}
+                // Hover alone left a phone, and anyone on a keyboard, with no
+                // way to see a month's split. Tap toggles; focus shows it.
                 onMouseEnter={() => setHover(i)}
                 onMouseLeave={() => setHover(null)}
-                style={{ cursor: "default" }}
+                onClick={() => setHover(active ? null : i)}
+                onFocus={() => setHover(i)}
+                onBlur={() => setHover(null)}
+                tabIndex={0}
+                role="button"
+                aria-label={`${d.month}: ${formatAud(total)} from ${d.jobs} ${d.jobs === 1 ? "job" : "jobs"}`}
+                style={{ cursor: "pointer", outline: "none" }}
               >
                 {/* hit target, larger than the mark */}
                 <rect x={PAD.left + band * i} y={PAD.top} width={band} height={plotH} fill="transparent" />
@@ -132,7 +140,7 @@ export function RevenueBars({ data }: { data: RevenueMonth[] }) {
           </div>
         </div>
       ) : (
-        <p className="mt-3 text-xs text-muted">Hover a month for the split.</p>
+        <p className="mt-3 text-xs text-muted">Hover or tap a month for the split.</p>
       )}
     </div>
   );
