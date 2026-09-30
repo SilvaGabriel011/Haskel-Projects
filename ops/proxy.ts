@@ -30,7 +30,10 @@ export const config = {
   // Everything except Next internals, the auth endpoints, static files — and
   // the public booking page plus its endpoint, which are the ONE part of this
   // app a customer is meant to reach. Everything else stays behind sign-in.
+  //
+  // Each exclusion is anchored to a whole path segment. Unanchored, "book"
+  // was a prefix and also let /bookings — admin only — skip this guard.
   matcher: [
-    "/((?!api/auth|api/book|book|_next/static|_next/image|favicon.ico|robots.txt).*)",
+    "/((?!(?:api/auth|api/book|book)(?:/|$)|_next/static/|_next/image(?:/|$)|(?:favicon\\.ico|robots\\.txt)$).*)",
   ],
 };

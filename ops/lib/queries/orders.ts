@@ -168,7 +168,17 @@ const DETAIL_ADMIN = {
   ...ADMIN_ORDER_SELECT,
   ...DETAIL_EXTRAS,
   customer: { select: { id: true, name: true, phone: true, suburb: true, email: true, source: true } },
-  lines: { select: { ...DETAIL_LINES_SHARED, unitPriceCents: true, lineTotalCents: true } },
+  lines: {
+    select: {
+      ...DETAIL_LINES_SHARED,
+      unitPriceCents: true,
+      lineTotalCents: true,
+      // What the material cost, so this job's margin is worked out the same way
+      // the financials work it out.
+      offcutId: true,
+      material: { select: { name: true, finish: true, thicknessMm: true, costPerSqmCents: true } },
+    },
+  },
 } satisfies Prisma.OrderSelect;
 
 const DETAIL_EMPLOYEE = {

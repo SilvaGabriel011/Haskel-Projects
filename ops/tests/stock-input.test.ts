@@ -116,6 +116,28 @@ describe("adding a slab", () => {
     assert.equal(validateStock({ ...SLAB, widthMm: "1400.5" }, NOW).ok, false);
   });
 
+  it("refuses a day that does not exist instead of rolling it over", () => {
+    // Date reads "2026-02-30" as 2 March without a word.
+    assert.equal(validateStock({ ...SLAB, arrivedAt: "2026-02-30" }, NOW).ok, false);
+    assert.equal(validateStock({ ...SLAB, arrivedAt: "2026-9-1" }, NOW).ok, false);
+    assert.equal(validateStock({ ...SLAB, arrivedAt: "2026-09-01T05:00" }, NOW).ok, false);
+  });
+
+  it("stores the arrival day as midnight on the business's calendar", () => {
+    const prev = process.env.BUSINESS_TIMEZONE;
+    process.env.BUSINESS_TIMEZONE = "Australia/Adelaide";
+    try {
+      const r = validateStock({ ...SLAB, arrivedAt: "2026-09-28" }, NOW);
+      assert.ok(r.ok && r.value.kind === "SLAB");
+      // Midnight in Adelaide (UTC+9:30, before daylight saving starts) is
+      // 14:30 UTC the day before — not midnight UTC, which is 9:30am there.
+      assert.equal(r.value.arrivedAt.toISOString(), "2026-09-27T14:30:00.000Z");
+    } finally {
+      if (prev === undefined) delete process.env.BUSINESS_TIMEZONE;
+      else process.env.BUSINESS_TIMEZONE = prev;
+    }
+  });
+
   it("refuses stock that arrives in the future", () => {
     assert.equal(validateStock({ ...SLAB, arrivedAt: "2027-01-01" }, NOW).ok, false);
   });

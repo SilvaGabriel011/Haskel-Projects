@@ -2,9 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
-import { db } from "@/lib/db";
 import { requireUser } from "@/lib/guard";
-import { FINAL_STAGE, canTransition, requiresAdmin } from "@/lib/pipeline";
+import { moveOrder } from "@/lib/order-move";
 import { releaseStock, reserveStock, type StockKind } from "@/lib/reservations";
 import type { OrderStatus } from "@prisma/client";
 
@@ -16,57 +15,24 @@ import type { OrderStatus } from "@prisma/client";
  * lose a job — an installer moves work along the bench but cannot change what
  * it is worth or write it off.
  *
- * The move and its stage history are written in one transaction. If the closing
- * of the old spell and the opening of the new one could come apart, a job would
- * end up either counted in two stages at once or in none, and every figure on
- * the timeline would be wrong from then on.
+ * The rules, the one-winner claim and the stage history live in
+ * lib/order-move.ts, where they are tested. This adds who is asking and the
+ * page refresh.
  */
 export async function advanceOrder(orderId: string, to: OrderStatus) {
   const user = await requireUser();
 
-  const order = await db.order.findUnique({
-    where: { id: orderId },
-    select: { id: true, status: true },
-  });
-  if (!order) return { ok: false as const, reason: "That job no longer exists." };
-
-  const check = canTransition(order.status, to);
-  if (!check.ok) return { ok: false as const, reason: check.reason };
-
-  if (user.role !== "ADMIN" && requiresAdmin(to)) {
-    return { ok: false as const, reason: "Only the office can move a job to that stage." };
-  }
-
-  const at = new Date();
-
-  await db.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id: orderId },
-      data: {
-        status: to,
-        ...(to === "ORDER_ACTIVE" ? { wonAt: at } : {}),
-        ...(to === FINAL_STAGE ? { completedAt: at } : {}),
-      },
-    });
-
-    // Close whatever spell is open, whichever stage it is for: there is only
-    // ever one, and leaving a stale open row would show the job in two places.
-    await tx.orderStage.updateMany({
-      where: { orderId, exitedAt: null },
-      data: { exitedAt: at },
-    });
-
-    // LOST is not a stage, so it opens no new spell — the job stops here.
-    if (to !== "LOST") {
-      await tx.orderStage.create({
-        data: { orderId, stage: to, enteredAt: at, movedById: user.id },
-      });
-    }
-  });
+  const res = await moveOrder({ orderId, to, userId: user.id, role: user.role });
+  if (!res.ok) return res;
 
   revalidatePath("/orders");
   revalidatePath("/board");
   revalidatePath(`/orders/${orderId}`);
+  if (to === "LOST") {
+    // Anything the job held went back on the rack.
+    revalidatePath("/stock");
+    revalidatePath("/offcuts");
+  }
   return { ok: true as const };
 }
 

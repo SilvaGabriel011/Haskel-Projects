@@ -10,6 +10,7 @@ import { formatDate, formatTime } from "@/lib/business-time";
 import { requireAccess } from "@/lib/guard";
 import { LABOUR_RATE_CENTS, formatAud, marginCents, marginPct } from "@/lib/money";
 import { FINAL_STAGE, PIPELINE_LABEL, STATUS_LABEL, nextStage } from "@/lib/pipeline";
+import { jobMaterialCostCents } from "@/lib/queries/financials";
 import { getOrderDetail, stageHistory } from "@/lib/queries/orders";
 import { availableStock, heldForOrder } from "@/lib/reservations";
 
@@ -32,12 +33,19 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const next = nextStage(order.status);
 
   // Admin only — the numbers simply are not present on an employee payload.
+  // Material cost follows the model /financials uses (lib/queries/financials),
+  // so a job's margin reads the same on its own page as in the reports. It used
+  // to be a flat 45% of the sell price, which charged offcut work for stone
+  // the financials treat as already paid for.
   let margin: { cents: number; pct: number; materials: number } | null = null;
   if (isAdmin && "quoteCents" in order) {
-    const materials = order.lines.reduce(
-      (t, l) => t + ("unitPriceCents" in l ? Math.round(l.sqm * (l.unitPriceCents ?? 0) * 0.45) : 0),
-      0,
-    );
+    const materials = jobMaterialCostCents({
+      lines: order.lines.map((l) => ({
+        sqm: l.sqm,
+        offcutId: "offcutId" in l ? l.offcutId : null,
+        material: l.material && "costPerSqmCents" in l.material ? l.material : null,
+      })),
+    });
     const cents = marginCents({
       quoteCents: order.quoteCents,
       materialCostCents: materials,
@@ -142,7 +150,9 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             </Card>
           )}
 
-          {available ? (
+          {/* A closed job still lists what it holds, so a piece is never stuck
+              reserved with no button to give it back. */}
+          {available || held.offcuts.length || held.slabs.length ? (
             <div className="mt-8">
               <SectionTitle>Held for this job</SectionTitle>
               <Card className="p-5">

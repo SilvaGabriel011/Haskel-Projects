@@ -133,4 +133,34 @@ describe("the public route is the only hole in the guard", () => {
       assert.ok(!matcher.includes(closed), `${closed} must NOT be excluded from the guard`);
     }
   });
+
+  it("guards every section, as Next itself compiles the matcher", async () => {
+    // Reading the source only proves which words appear in it. An unanchored
+    // "book" also matched "bookings", and the admin-only /bookings page ran
+    // with no route guard at all. Compile the matcher the way Next does and
+    // ask it about real paths instead.
+    const { readFileSync } = await import("node:fs");
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
+    const { getMiddlewareMatchers } = require("next/dist/build/analysis/get-page-static-info");
+    const { getMiddlewareRouteMatcher } = require("next/dist/shared/lib/router/utils/middleware-route-matcher");
+    const { SECTIONS } = await import("../lib/roles");
+
+    const proxy = readFileSync(new URL("../proxy.ts", import.meta.url), "utf8");
+    const literal = proxy.match(/matcher:\s*\[\s*("(?:[^"\\]|\\.)*")/)?.[1];
+    assert.ok(literal, "matcher string not found in proxy.ts");
+    const guarded = getMiddlewareRouteMatcher(getMiddlewareMatchers([JSON.parse(literal)], {}));
+    const runs = (path: string) => guarded(path, { headers: {} }, {});
+
+    for (const s of SECTIONS) {
+      assert.ok(runs(s.href), `${s.href} must run through the guard`);
+      assert.ok(runs(`${s.href}/x`), `${s.href}/x must run through the guard`);
+    }
+    for (const lookalike of ["/booking", "/books", "/api/bookings", "/api/authz", "/robots.txt.bak"]) {
+      assert.ok(runs(lookalike), `${lookalike} must run through the guard`);
+    }
+    for (const open of ["/book", "/api/book", "/api/auth/session", "/_next/static/a.js", "/favicon.ico", "/robots.txt"]) {
+      assert.ok(!runs(open), `${open} must stay public`);
+    }
+  });
 });

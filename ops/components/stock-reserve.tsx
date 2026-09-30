@@ -23,7 +23,8 @@ export function StockReserve({
 }: {
   orderId: string;
   held: { offcuts: Piece[]; slabs: Piece[] };
-  available: { offcuts: Option[]; slabs: Option[] };
+  /** Null on a closed job: nothing new can be held, but what is held can go back. */
+  available: { offcuts: Option[]; slabs: Option[] } | null;
 }) {
   const [pending, start] = useTransition();
   const [choice, setChoice] = useState("");
@@ -66,48 +67,50 @@ export function StockReserve({
         <p className="text-sm text-ink-2">Nothing held for this job yet.</p>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <label htmlFor={`reserve-${orderId}`} className="sr-only">
-          Piece to hold
-        </label>
-        <select
-          id={`reserve-${orderId}`}
-          value={choice}
-          onChange={(e) => setChoice(e.target.value)}
-          className="min-w-0 flex-1 rounded-full border border-line bg-white px-4 py-2 text-sm"
-        >
-          <option value="">Choose a piece to hold…</option>
-          {available.offcuts.length ? (
-            <optgroup label="Offcuts">
-              {available.offcuts.map((o) => (
-                <option key={o.id} value={`offcut:${o.id}`}>
-                  {o.ref} · {o.material.name} · {size(o)} · rack {o.rack}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-          {available.slabs.length ? (
-            <optgroup label="Slabs">
-              {available.slabs.map((o) => (
-                <option key={o.id} value={`slab:${o.id}`}>
-                  {o.ref} · {o.material.name} · {size(o)} · rack {o.rack}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-        </select>
-        <button
-          type="button"
-          disabled={pending || !choice}
-          onClick={() => {
-            const [kind, id] = choice.split(":") as ["offcut" | "slab", string];
-            run(() => reserveForOrder(orderId, kind, id), "Held for this job.");
-          }}
-          className="rounded-full bg-rose px-5 py-2 text-xs font-semibold text-white transition hover:bg-rose-deep disabled:opacity-60"
-        >
-          {pending ? "Working…" : "Hold for this job"}
-        </button>
-      </div>
+      {available ? (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <label htmlFor={`reserve-${orderId}`} className="sr-only">
+            Piece to hold
+          </label>
+          <select
+            id={`reserve-${orderId}`}
+            value={choice}
+            onChange={(e) => setChoice(e.target.value)}
+            className="min-w-0 flex-1 rounded-full border border-line bg-white px-4 py-2 text-sm"
+          >
+            <option value="">Choose a piece to hold…</option>
+            {available.offcuts.length ? (
+              <optgroup label="Offcuts">
+                {available.offcuts.map((o) => (
+                  <option key={o.id} value={`offcut:${o.id}`}>
+                    {o.ref} · {o.material.name} · {size(o)} · rack {o.rack}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {available.slabs.length ? (
+              <optgroup label="Slabs">
+                {available.slabs.map((o) => (
+                  <option key={o.id} value={`slab:${o.id}`}>
+                    {o.ref} · {o.material.name} · {size(o)} · rack {o.rack}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+          </select>
+          <button
+            type="button"
+            disabled={pending || !choice}
+            onClick={() => {
+              const [kind, id] = choice.split(":") as ["offcut" | "slab", string];
+              run(() => reserveForOrder(orderId, kind, id), "Held for this job.");
+            }}
+            className="rounded-full bg-rose px-5 py-2 text-xs font-semibold text-white transition hover:bg-rose-deep disabled:opacity-60"
+          >
+            {pending ? "Working…" : "Hold for this job"}
+          </button>
+        </div>
+      ) : null}
 
       {msg ? (
         <p

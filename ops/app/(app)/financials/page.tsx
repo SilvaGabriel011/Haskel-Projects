@@ -31,7 +31,7 @@ export default async function FinancialsPage() {
       <section className="mt-9 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Tile label="Revenue" value={formatAud(totals.revenue)} sub={`${totals.jobs} jobs completed`} />
         <Tile label="Gross margin" value={formatAud(totals.margin)} sub={`${totals.marginPct}% of revenue, before overheads`} />
-        <Tile label="Average job" value={formatAud(totals.avgJobCents)} sub={`${totals.winRate}% of quotes won`} />
+        <Tile label="Average job" value={formatAud(totals.avgJobCents)} sub={`${totals.winRate}% of decided quotes won`} />
         <Tile label="Stock on the rack" value={formatAud(totals.stockValue)} sub="At cost, in stock and reserved" href="/stock" />
       </section>
 
