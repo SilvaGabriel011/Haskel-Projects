@@ -37,3 +37,26 @@ test("a new starter is shown round once, then goes straight to work", async ({ p
   await page.getByRole("link", { name: "Getting started" }).click();
   await page.waitForURL("**/welcome");
 });
+
+test("the walkthrough shows how it is done, in clips that play", async ({ page }) => {
+  const password = process.env.E2E_ADMIN_PASSWORD ?? "";
+  expect(password, "set E2E_ADMIN_PASSWORD").not.toBe("");
+  await page.goto("/login");
+  await page.selectOption("#demo-email", "admin@haskelproject.com.au");
+  await page.fill("#demo-password", password);
+  await page.click('button:has-text("Sign in with password")');
+  await page.waitForURL((u) => !u.pathname.startsWith("/login"));
+
+  await page.goto("/welcome");
+  // An admin sees moving a job, opening one, and adding stock.
+  const clips = page.locator("video");
+  await expect(clips).toHaveCount(3);
+  for (const label of ["Moving a job on", "Opening a job for a company", "Adding an offcut"]) {
+    await expect(page.locator("figcaption", { hasText: label })).toBeVisible();
+  }
+  // And a clip scrolled into view actually plays.
+  await clips.first().scrollIntoViewIfNeeded();
+  await expect
+    .poll(() => clips.first().evaluate((v: HTMLVideoElement) => !v.paused && v.readyState >= 2), { timeout: 8000 })
+    .toBe(true);
+});

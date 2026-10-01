@@ -98,11 +98,21 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               {order.actualHours ? `est. ${order.estimatedHours}` : "estimated"}
             </div>
           </Card>
-          <Card className={`p-5 ${margin.cents < 0 ? "border-rose bg-blush" : ""}`}>
-            <div className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-muted">Margin</div>
-            <div className="mt-2 text-2xl font-extrabold tabular-nums">{formatAud(margin.cents)}</div>
-            <div className="text-xs text-ink-2">{margin.pct}% of quote</div>
-          </Card>
+          {/* No quote, no margin: the stone's cost alone would read as a loss,
+              in red, on every job the office has only just opened. */}
+          {order.quoteCents > 0 ? (
+            <Card className={`p-5 ${margin.cents < 0 ? "border-rose bg-blush" : ""}`}>
+              <div className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-muted">Margin</div>
+              <div className="mt-2 text-2xl font-extrabold tabular-nums">{formatAud(margin.cents)}</div>
+              <div className="text-xs text-ink-2">{margin.pct}% of quote</div>
+            </Card>
+          ) : (
+            <Card className="p-5">
+              <div className="text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-muted">Margin</div>
+              <div className="mt-2 text-2xl font-extrabold tabular-nums text-muted">—</div>
+              <div className="text-xs text-ink-2">No quote yet</div>
+            </Card>
+          )}
         </section>
       ) : null}
 
@@ -124,7 +134,10 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-2">
                     <span className="tabular-nums">{l.sqm} m²</span>
                     <span className="tabular-nums">{l.labourHours} h</span>
-                    {l.material ? (
+                    {/* A line opened from New job already names its stone, with the
+                        thickness and finish chosen for it. Repeating the colour's
+                        own defaults beside it would contradict them. */}
+                    {l.material && !l.description.startsWith(l.material.name) ? (
                       <span>{l.material.name} · {l.material.finish} · {l.material.thicknessMm}mm</span>
                     ) : null}
                   </div>
