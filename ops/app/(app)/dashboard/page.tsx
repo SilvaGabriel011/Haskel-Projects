@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { db } from "@/lib/db";
 import { requireUser } from "@/lib/guard";
 import { SECTIONS, sectionsFor } from "@/lib/roles";
+import { needsWelcome } from "@/lib/welcome";
 import { PageHead } from "@/components/page-head";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -14,6 +17,10 @@ export default async function DashboardPage({
 }) {
   const user = await requireUser();
   const { denied } = await searchParams;
+
+  // Somebody new lands here after signing in: show them round first, once.
+  const me = await db.user.findUnique({ where: { id: user.id }, select: { onboardedAt: true } });
+  if (me && needsWelcome(me, denied)) redirect("/welcome");
   const isAdmin = user.role === "ADMIN";
   const sections = sectionsFor(user.role).filter((s) => s.href !== "/dashboard");
   // Read from the same list the guard uses, so this can never name the wrong
