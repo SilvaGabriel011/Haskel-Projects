@@ -5,6 +5,7 @@ import { StaffRow } from "@/components/staff-row";
 import { Card, Pill, SectionTitle } from "@/components/ui";
 import { demoModeEnabled, workspaceDomain } from "@/lib/access-config";
 import { requireAdmin } from "@/lib/guard";
+import { CURRENT, RELEASES, releaseDate } from "@/lib/releases";
 import { db } from "@/lib/db";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -89,6 +90,43 @@ export default async function SettingsPage() {
           from this page. <code className="rounded bg-sand px-1.5 py-0.5">ops/README.md</code> has
           the steps.
         </p>
+      </section>
+
+      <section id="version" className="mt-10 scroll-mt-6">
+        <SectionTitle aside={<Pill tone="good">v{CURRENT.version}</Pill>}>Version and changes</SectionTitle>
+        <p className="max-w-2xl text-sm text-ink-2">
+          Haskel Ops {CURRENT.version}, released {releaseDate(CURRENT.date)}. Every update, newest first:
+        </p>
+        <ol className="mt-4 grid max-w-3xl gap-3">
+          {RELEASES.map((r) => (
+            <li key={r.version}>
+              <Card className="px-5 py-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div className="font-semibold">
+                    {r.title}
+                    <span className="ml-2 text-xs font-normal tabular-nums text-ink-2">{r.version}</span>
+                  </div>
+                  <span className="text-xs text-ink-2">{releaseDate(r.date)}</span>
+                </div>
+                <ul className="mt-2 grid gap-1 text-sm text-ink-2">
+                  {r.items.map((item) => (
+                    <li key={item.text} className="flex gap-2">
+                      <span aria-hidden="true">•</span>
+                      <span>
+                        {item.text}
+                        {item.roles?.length === 1 ? (
+                          <span className="ml-2 text-[0.62rem] font-bold uppercase tracking-[0.1em] text-muted">
+                            {item.roles[0] === "ADMIN" ? "Admins" : "Employees"}
+                          </span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </li>
+          ))}
+        </ol>
       </section>
     </>
   );

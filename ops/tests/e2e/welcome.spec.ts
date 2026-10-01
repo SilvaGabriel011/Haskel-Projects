@@ -32,6 +32,8 @@ test("a new starter is shown round once, then goes straight to work", async ({ p
   // Done once, done for good: the dashboard no longer sends them away.
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/dashboard$/);
+  // And, having just been shown round, nothing is "new" to them.
+  await expect(page.getByRole("region", { name: "What’s new" })).toHaveCount(0);
 
   // And it is still there to come back to.
   await page.getByRole("link", { name: "Getting started" }).click();

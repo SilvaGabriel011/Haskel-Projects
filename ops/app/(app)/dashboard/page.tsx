@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/guard";
 import { SECTIONS, sectionsFor } from "@/lib/roles";
 import { needsWelcome } from "@/lib/welcome";
+import { whatsNewFor } from "@/lib/releases";
+import { WhatsNew } from "@/components/whats-new";
 import { PageHead } from "@/components/page-head";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -19,8 +21,13 @@ export default async function DashboardPage({
   const { denied } = await searchParams;
 
   // Somebody new lands here after signing in: show them round first, once.
-  const me = await db.user.findUnique({ where: { id: user.id }, select: { onboardedAt: true } });
+  const me = await db.user.findUnique({
+    where: { id: user.id },
+    select: { onboardedAt: true, seenVersion: true },
+  });
   if (me && needsWelcome(me, denied)) redirect("/welcome");
+  // Everyone else hears once about what changed since they last looked.
+  const news = me ? whatsNewFor(me, user.role) : null;
   const isAdmin = user.role === "ADMIN";
   const sections = sectionsFor(user.role).filter((s) => s.href !== "/dashboard");
   // Read from the same list the guard uses, so this can never name the wrong
@@ -55,6 +62,8 @@ export default async function DashboardPage({
           should have access, ask an admin.
         </p>
       ) : null}
+
+      {news ? <WhatsNew news={news} /> : null}
 
       <section className="mt-9">
         <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">

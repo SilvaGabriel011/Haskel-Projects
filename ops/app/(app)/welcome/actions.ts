@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/guard";
+import { CURRENT } from "@/lib/releases";
 
 /**
  * Finish the walkthrough and go to work.
@@ -16,7 +17,9 @@ export async function finishWelcome() {
   const me = await requireUser();
   await db.user.updateMany({
     where: { id: me.id, onboardedAt: null },
-    data: { onboardedAt: new Date() },
+    // The walkthrough covers what is current, so there is nothing "new" to
+    // tell them on the dashboard straight after.
+    data: { onboardedAt: new Date(), seenVersion: CURRENT.version },
   });
   redirect("/dashboard");
 }
