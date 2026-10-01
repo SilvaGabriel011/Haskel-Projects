@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { Clip } from "@/components/clip";
 import { PageHead } from "@/components/page-head";
 import { Card } from "@/components/ui";
 import { requireUser } from "@/lib/guard";
@@ -24,7 +25,16 @@ export default async function WelcomePage() {
   const first = user.name.split(" ")[0].toLowerCase();
   const stages = stagesFor(user.role);
 
-  const steps: Array<{ title: string; body: React.ReactNode; href?: string; cta?: string }> = [
+  type Step = {
+    title: string;
+    body: React.ReactNode;
+    href?: string;
+    cta?: string;
+    /** A short recording of it being done, from public/media/welcome. */
+    clip?: { name: string; label: string };
+  };
+
+  const steps: Step[] = [
     {
       title: isAdmin ? "The week, for everyone" : "Your week",
       body: isAdmin
@@ -71,7 +81,31 @@ export default async function WelcomePage() {
       ),
       href: "/orders",
       cta: "See the jobs",
+      clip: { name: "move-a-job", label: "Moving a job on: open it, press the button for the next stage." },
     },
+    ...(isAdmin
+      ? [
+          {
+            title: "Opening a job by hand",
+            body: (
+              <>
+                <p>
+                  For the phone call, the builder, the walk-in: <b>New job</b> on Orders. Pick the client, or
+                  create their profile as a person or a company. A company hiring you for its own customer is
+                  the client and pays; put the homeowner under <i>Who is the job for?</i> so installers know
+                  who to ring.
+                </p>
+                <p className="mt-2">
+                  The stone can wait for the quote, or be chosen now: type, then colour, thickness and finish.
+                </p>
+              </>
+            ),
+            href: "/orders/new",
+            cta: "Open a job",
+            clip: { name: "open-a-job", label: "Opening a job for a company, with the homeowner and the stone." },
+          },
+        ]
+      : []),
     {
       title: "What needs chasing",
       body: "Follow up flags jobs that have sat in one stage for three days (amber) or five (red), jobs missing details like a phone number or cut list, and bookings that have come and gone.",
@@ -80,9 +114,14 @@ export default async function WelcomePage() {
     },
     {
       title: "Stock and offcuts",
-      body: "Every slab and offcut is on the rack with its size and where it lives. Hold a piece for a job from the job’s page so nobody else takes it; release it if the plan changes.",
-      href: "/offcuts",
-      cta: "See the rack",
+      body: isAdmin
+        ? "Every slab and offcut is on the rack with its size and where it lives. Add stock on the Stock page: pick the type of stone, then the colour; thickness and finish are dropdowns too. Hold a piece for a job from the job’s page so nobody else takes it."
+        : "Every slab and offcut is on the rack with its size and where it lives. Hold a piece for a job from the job’s page so nobody else takes it; release it if the plan changes.",
+      href: isAdmin ? "/stock" : "/offcuts",
+      cta: isAdmin ? "Open stock" : "See the rack",
+      ...(isAdmin
+        ? { clip: { name: "add-stock", label: "Adding an offcut: type of stone, colour, size, rack." } }
+        : {}),
     },
     ...(isAdmin
       ? [
@@ -129,6 +168,9 @@ export default async function WelcomePage() {
                 <div className="min-w-0 flex-1">
                   <h2 className="text-lg font-semibold">{step.title}</h2>
                   <div className="mt-2 text-sm leading-relaxed text-ink-2">{step.body}</div>
+                  {step.clip ? (
+                    <Clip src={`/media/welcome/${step.clip.name}`} label={step.clip.label} />
+                  ) : null}
                   {step.href ? (
                     <Link
                       href={step.href}
