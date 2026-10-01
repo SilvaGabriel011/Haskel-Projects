@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createStock } from "@/app/(app)/stock/actions";
+import { coloursOf, finishOptions, supplierOptions, thicknessOptions } from "@/lib/stone";
 import {
   MATERIAL_KINDS,
   MATERIAL_KIND_LABEL,
@@ -12,10 +13,13 @@ import {
   STOCK_KIND_LABEL,
   type StockKind,
 } from "@/lib/stock-input";
+import type { MaterialKind } from "@prisma/client";
 
 export type MaterialOption = {
   id: string;
   name: string;
+  kind: MaterialKind;
+  supplier: string;
   finish: string;
   thicknessMm: number;
 };
@@ -40,6 +44,7 @@ function today() {
 type Values = Record<string, string | boolean>;
 
 const NEW_MATERIAL = "__new__";
+const NEW_SUPPLIER = "__new__";
 
 /**
  * Defaults seeded into state the moment a kind is picked.
@@ -88,6 +93,12 @@ export function AddStock({
   const steps = stepsFor(kind);
   const last = steps.length - 1;
   const usingNewMaterial = values.materialChoice === NEW_MATERIAL || materials.length === 0;
+  const stoneType = String(values.stoneType ?? "") as MaterialKind | "";
+  const colours = coloursOf(materials, stoneType);
+  const thicknesses = thicknessOptions(materials.map((m) => m.thicknessMm));
+  const finishes = finishOptions(materials.map((m) => m.finish));
+  const suppliers = supplierOptions(materials.map((m) => m.supplier));
+  const newSupplier = values.supplierChoice === NEW_SUPPLIER || suppliers.length === 0;
 
   const set = (k: string, v: string | boolean) => {
     setValues((prev) => ({ ...prev, [k]: v }));
@@ -149,7 +160,8 @@ export function AddStock({
         }
         return null;
       }
-      return v("materialId") ? null : "Pick a material, or add a new one.";
+      if (!v("stoneType")) return "Pick the type of stone.";
+      return v("materialId") ? null : "Pick the colour, or add a new one.";
     }
 
     if (step === 2) {
@@ -184,7 +196,7 @@ export function AddStock({
 
     // materialChoice is the picker's own state; the server wants materialId, or
     // nothing at all when a new material is being created alongside the piece.
-    const { materialChoice: _picker, ...rest } = values;
+    const { materialChoice: _picker, stoneType: _type, supplierChoice: _supplier, ...rest } = values;
     const payload: Values = { ...rest };
     if (usingNewMaterial) delete payload.materialId;
 
@@ -371,25 +383,62 @@ export function AddStock({
               {kind !== "CONSUMABLE" && step === 1 ? (
                 <>
                   {materials.length > 0 ? (
-                    <Field id="materialChoice" label="Material">
-                      <select
-                        id="materialChoice"
-                        className={field}
-                        value={String(values.materialChoice ?? "")}
-                        onChange={(e) => {
-                          set("materialChoice", e.target.value);
-                          set("materialId", e.target.value === NEW_MATERIAL ? "" : e.target.value);
-                        }}
-                      >
-                        <option value="">Pick one…</option>
-                        {materials.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} — {m.finish}, {m.thicknessMm}mm
-                          </option>
-                        ))}
-                        <option value={NEW_MATERIAL}>＋ A material not on the list</option>
-                      </select>
-                    </Field>
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <Field id="stoneType" label="Type of stone">
+                        <select
+                          id="stoneType"
+                          className={field}
+                          value={stoneType}
+                          onChange={(e) =>
+                            setValues((prev) => ({
+                              ...prev,
+                              stoneType: e.target.value,
+                              // A colour belongs to one type; changing type clears it.
+                              materialChoice: "",
+                              materialId: "",
+                              materialKind: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Pick one…</option>
+                          {MATERIAL_KINDS.map((k) => (
+                            <option key={k} value={k}>
+                              {MATERIAL_KIND_LABEL[k]}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field id="materialChoice" label="Colour">
+                        <select
+                          id="materialChoice"
+                          className={field}
+                          disabled={!stoneType}
+                          value={String(values.materialChoice ?? "")}
+                          onChange={(e) => {
+                            const choice = e.target.value;
+                            const m = materials.find((x) => x.id === choice);
+                            setValues((prev) => ({
+                              ...prev,
+                              materialChoice: choice,
+                              materialId: choice === NEW_MATERIAL ? "" : choice,
+                              // An offcut starts from its material's own thickness and finish.
+                              ...(m && prev.kind === "OFFCUT"
+                                ? { thicknessMm: String(m.thicknessMm), finish: m.finish }
+                                : {}),
+                            }));
+                            setError(null);
+                          }}
+                        >
+                          <option value="">{stoneType ? "Pick one…" : "Pick the type first"}</option>
+                          {colours.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} — {m.finish}, {m.thicknessMm} mm
+                            </option>
+                          ))}
+                          <option value={NEW_MATERIAL}>＋ A colour not on the list</option>
+                        </select>
+                      </Field>
+                    </div>
                   ) : (
                     <p className="rounded-xl border border-line bg-white px-4 py-3 text-sm text-ink-2">
                       No materials on file yet, so this one is the first.
@@ -398,7 +447,7 @@ export function AddStock({
 
                   {usingNewMaterial ? (
                     <div className="grid gap-5 rounded-[18px] border border-line bg-white p-5">
-                      <Field id="materialName" label="Name">
+                      <Field id="materialName" label="Colour name">
                         <input
                           id="materialName"
                           className={field}
@@ -408,48 +457,89 @@ export function AddStock({
                         />
                       </Field>
                       <div className="grid gap-5 sm:grid-cols-2">
-                        <Field id="materialKind" label="Kind">
-                          <select
-                            id="materialKind"
-                            className={field}
-                            value={String(values.materialKind ?? "")}
-                            onChange={(e) => set("materialKind", e.target.value)}
-                          >
-                            <option value="">Pick one…</option>
-                            {MATERIAL_KINDS.map((k) => (
-                              <option key={k} value={k}>
-                                {MATERIAL_KIND_LABEL[k]}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field id="materialSupplier" label="Supplier">
-                          <input
-                            id="materialSupplier"
-                            className={field}
-                            value={String(values.materialSupplier ?? "")}
-                            onChange={(e) => set("materialSupplier", e.target.value)}
-                            placeholder="Coastline Stone Co"
-                          />
+                        {/* Picked above when there is a list to pick from. */}
+                        {materials.length === 0 ? (
+                          <Field id="materialKind" label="Kind">
+                            <select
+                              id="materialKind"
+                              className={field}
+                              value={String(values.materialKind ?? "")}
+                              onChange={(e) => set("materialKind", e.target.value)}
+                            >
+                              <option value="">Pick one…</option>
+                              {MATERIAL_KINDS.map((k) => (
+                                <option key={k} value={k}>
+                                  {MATERIAL_KIND_LABEL[k]}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        ) : null}
+                        <Field id="supplierChoice" label="Supplier">
+                          {suppliers.length > 0 ? (
+                            <select
+                              id="supplierChoice"
+                              className={field}
+                              value={String(values.supplierChoice ?? "")}
+                              onChange={(e) => {
+                                const choice = e.target.value;
+                                setValues((prev) => ({
+                                  ...prev,
+                                  supplierChoice: choice,
+                                  materialSupplier: choice === NEW_SUPPLIER ? "" : choice,
+                                }));
+                                setError(null);
+                              }}
+                            >
+                              <option value="">Pick one…</option>
+                              {suppliers.map((x) => (
+                                <option key={x} value={x}>
+                                  {x}
+                                </option>
+                              ))}
+                              <option value={NEW_SUPPLIER}>＋ A new supplier</option>
+                            </select>
+                          ) : null}
+                          {newSupplier ? (
+                            <input
+                              id="materialSupplier"
+                              aria-label="New supplier's name"
+                              className={`${field} ${suppliers.length > 0 ? "mt-2" : ""}`}
+                              value={String(values.materialSupplier ?? "")}
+                              onChange={(e) => set("materialSupplier", e.target.value)}
+                              placeholder="Coastline Stone Co"
+                            />
+                          ) : null}
                         </Field>
                         <Field id="materialFinish" label="Finish">
-                          <input
+                          <select
                             id="materialFinish"
                             className={field}
                             value={String(values.materialFinish ?? "")}
                             onChange={(e) => set("materialFinish", e.target.value)}
-                            placeholder="Polished"
-                          />
+                          >
+                            <option value="">Pick one…</option>
+                            {finishes.map((f) => (
+                              <option key={f} value={f}>
+                                {f}
+                              </option>
+                            ))}
+                          </select>
                         </Field>
-                        <Field id="materialThicknessMm" label="Thickness (mm)">
-                          <input
+                        <Field id="materialThicknessMm" label="Thickness">
+                          <select
                             id="materialThicknessMm"
-                            inputMode="numeric"
                             className={field}
                             value={String(values.materialThicknessMm ?? "")}
                             onChange={(e) => set("materialThicknessMm", e.target.value)}
-                            placeholder="20"
-                          />
+                          >
+                            <option value="">Pick one…</option>
+                            {thicknesses.map((t) => (
+                              <option key={t} value={t}>
+                                {t} mm
+                              </option>
+                            ))}
+                          </select>
                         </Field>
                       </div>
                       <Field id="materialCostPerSqm" label="Cost per m²" hint="What you pay, not what you charge.">
@@ -527,23 +617,35 @@ export function AddStock({
                   ) : (
                     <>
                       <div className="grid gap-5 sm:grid-cols-2">
-                        <Field id="thicknessMm" label="Thickness (mm)">
-                          <input
+                        <Field id="thicknessMm" label="Thickness">
+                          <select
                             id="thicknessMm"
-                            inputMode="numeric"
                             className={field}
                             value={String(values.thicknessMm ?? "")}
                             onChange={(e) => set("thicknessMm", e.target.value)}
-                          />
+                          >
+                            <option value="">Pick one…</option>
+                            {thicknesses.map((t) => (
+                              <option key={t} value={t}>
+                                {t} mm
+                              </option>
+                            ))}
+                          </select>
                         </Field>
                         <Field id="finish" label="Finish">
-                          <input
+                          <select
                             id="finish"
                             className={field}
                             value={String(values.finish ?? "")}
                             onChange={(e) => set("finish", e.target.value)}
-                            placeholder="Polished"
-                          />
+                          >
+                            <option value="">Pick one…</option>
+                            {finishes.map((f) => (
+                              <option key={f} value={f}>
+                                {f}
+                              </option>
+                            ))}
+                          </select>
                         </Field>
                       </div>
 

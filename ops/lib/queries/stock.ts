@@ -210,7 +210,7 @@ export async function recentMovements(take = 12) {
  */
 export async function listMaterialOptions() {
   return db.material.findMany({
-    select: { id: true, name: true, finish: true, thicknessMm: true },
+    select: { id: true, name: true, kind: true, supplier: true, finish: true, thicknessMm: true },
     orderBy: { name: "asc" },
   });
 }

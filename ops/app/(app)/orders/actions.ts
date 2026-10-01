@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireUser } from "@/lib/guard";
+import { requireAdmin, requireUser } from "@/lib/guard";
+import { createJob, validateNewJob } from "@/lib/new-job";
 import { moveOrder } from "@/lib/order-move";
 import { releaseStock, reserveStock, type StockKind } from "@/lib/reservations";
 import type { OrderStatus } from "@prisma/client";
@@ -61,4 +62,26 @@ function revalidateStock(orderId: string) {
   revalidatePath(`/orders/${orderId}`);
   revalidatePath("/stock");
   revalidatePath("/offcuts");
+}
+
+/**
+ * Open a job by hand: the phone call, the builder, the walk-in.
+ *
+ * Admin only, re-asserted here because a server action is its own endpoint.
+ * Choosing the client and the stone is the office's call, like quoting.
+ * Rules and writing live in lib/new-job.ts, where they are tested.
+ */
+export async function openJob(form: Record<string, unknown>) {
+  const me = await requireAdmin();
+
+  const parsed = validateNewJob(form);
+  if (!parsed.ok) return parsed;
+
+  const res = await createJob(parsed.value, me.id);
+  if (!res.ok) return res;
+
+  revalidatePath("/orders");
+  revalidatePath("/board");
+  revalidatePath("/dashboard");
+  return res;
 }

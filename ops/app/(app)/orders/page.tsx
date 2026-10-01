@@ -5,22 +5,14 @@ import { PageHead } from "@/components/page-head";
 import { Empty, Pill, when } from "@/components/ui";
 import { requireAccess } from "@/lib/guard";
 import { formatAud } from "@/lib/money";
+import { JOB_TYPE_LABEL } from "@/lib/job-options";
 import { PIPELINE_LABEL, STAGES, STATUS_LABEL } from "@/lib/pipeline";
 import { ordersBoard, pipelineCounts } from "@/lib/queries/orders";
 import type { OrderStatus, Pipeline } from "@prisma/client";
 
 export const metadata: Metadata = { title: "Orders" };
 
-const JOB_LABEL: Record<string, string> = {
-  OFFCUT_PROJECT: "Offcut project",
-  VANITY_TOP: "Vanity top",
-  SMALL_BENCHTOP: "Small benchtop",
-  REPAIR: "Repair",
-  CUTOUT: "Cut-out",
-  TOP_REMOVAL: "Top removal",
-  FULL_BENCHTOP: "Full benchtop",
-  SPLASHBACK: "Splashback",
-};
+const JOB_LABEL = JOB_TYPE_LABEL;
 
 export default async function OrdersPage({
   searchParams,
@@ -45,11 +37,23 @@ export default async function OrdersPage({
 
   return (
     <>
-      <PageHead
-        eyebrow="Two boards, one table"
-        title={<>orders</>}
-        lede="Offcut and small jobs run a short board. Benchtop installs run the long one. The figures read across both."
-      />
+      <div className="flex flex-wrap items-start justify-between gap-6">
+        <PageHead
+          eyebrow="Two boards, one table"
+          title={<>orders</>}
+          lede="Offcut and small jobs run a short board. Benchtop installs run the long one. The figures read across both."
+        />
+        {isAdmin ? (
+          <div className="pt-2">
+            <Link
+              href="/orders/new"
+              className="inline-block rounded-full bg-rose px-5 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-white transition hover:bg-rose-deep"
+            >
+              New job
+            </Link>
+          </div>
+        ) : null}
+      </div>
 
       <div className="mt-8 flex flex-wrap gap-2">
         {(["SHORT", "FULL"] as const).map((p) => {

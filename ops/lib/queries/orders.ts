@@ -33,6 +33,9 @@ const SHARED_ORDER_SELECT = {
   createdAt: true,
   wonAt: true,
   completedAt: true,
+  // The homeowner, when a company is the client. Installers need it to get in.
+  siteContactName: true,
+  siteContactPhone: true,
   customer: { select: { id: true, name: true, phone: true, suburb: true } },
 } satisfies Prisma.OrderSelect;
 
@@ -167,7 +170,9 @@ const DETAIL_EXTRAS = {
 const DETAIL_ADMIN = {
   ...ADMIN_ORDER_SELECT,
   ...DETAIL_EXTRAS,
-  customer: { select: { id: true, name: true, phone: true, suburb: true, email: true, source: true } },
+  customer: {
+    select: { id: true, kind: true, contactName: true, name: true, phone: true, suburb: true, email: true, source: true },
+  },
   lines: {
     select: {
       ...DETAIL_LINES_SHARED,
@@ -184,7 +189,7 @@ const DETAIL_ADMIN = {
 const DETAIL_EMPLOYEE = {
   ...SHARED_ORDER_SELECT,
   ...DETAIL_EXTRAS,
-  customer: { select: { id: true, name: true, phone: true, suburb: true } },
+  customer: { select: { id: true, kind: true, contactName: true, name: true, phone: true, suburb: true } },
   lines: { select: DETAIL_LINES_SHARED },
 } satisfies Prisma.OrderSelect;
 
@@ -228,5 +233,13 @@ export async function stageHistory(orderId: string) {
       exitedAt: true,
       movedBy: { select: { name: true } },
     },
+  });
+}
+
+/** Clients for the New job picker: companies and people, by name. Admin only. */
+export async function listClientOptions() {
+  return db.customer.findMany({
+    select: { id: true, kind: true, name: true, contactName: true, phone: true, suburb: true },
+    orderBy: { name: "asc" },
   });
 }
