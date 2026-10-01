@@ -56,6 +56,22 @@ test.describe("signed out", () => {
       await expect(page).toHaveURL(/\/login/);
     });
   }
+
+  test("the address stays readable, with no encoded callbackUrl", async ({ page }) => {
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/login$/);
+    await page.goto("/orders?view=list");
+    expect(new URL(page.url()).search).toBe("?next=/orders?view=list");
+  });
+
+  test("signing in from a deep link lands back on it", async ({ page }) => {
+    expect(INSTALLER.password, "set E2E_INSTALLER_PASSWORD").not.toBe("");
+    await page.goto("/offcuts");
+    await page.selectOption("#demo-email", INSTALLER.email);
+    await page.fill("#demo-password", INSTALLER.password);
+    await page.click('button:has-text("Sign in with password")');
+    await page.waitForURL("**/offcuts");
+  });
 });
 
 test.describe("employee", () => {

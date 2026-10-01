@@ -208,6 +208,18 @@ async function main() {
     }));
   }
 
+  // Two companies that send us work for their own customers, so the client
+  // picker on New job shows both kinds. Kept out of `customers`, and made
+  // without drawing on the random sequence, so every other row seeds as before.
+  await db.customer.create({
+    data: { kind: "COMPANY", name: "Hills Kitchens", contactName: "Dana Price", phone: "08 8370 1200",
+            email: "jobs@hillskitchens.example.com", suburb: "Stirling", source: "REPEAT" },
+  });
+  await db.customer.create({
+    data: { kind: "COMPANY", name: "Seaview Builders", contactName: "Marco Ricci", phone: "08 8356 4400",
+            email: null, suburb: "Glenelg", source: "REFERRAL" },
+  });
+
   // ---- orders ------------------------------------------------------------
   const availableOffcuts = offcuts.filter((o) => o.status !== "AVAILABLE");
   let jobNo = 0;

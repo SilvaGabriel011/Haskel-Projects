@@ -205,9 +205,15 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           )}
 
           <div className="mt-8">
-            <SectionTitle>Customer</SectionTitle>
+            <SectionTitle>Client</SectionTitle>
             <Card className="p-5 text-sm">
-              <div className="font-semibold">{order.customer.name}</div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="font-semibold">{order.customer.name}</div>
+                <Pill>{order.customer.kind === "COMPANY" ? "Company" : "Person"}</Pill>
+              </div>
+              {order.customer.contactName ? (
+                <div className="mt-1 text-ink-2">Contact: {order.customer.contactName}</div>
+              ) : null}
               <div className="mt-1 text-ink-2">{order.customer.phone}</div>
               {"email" in order.customer && order.customer.email ? (
                 <div className="text-ink-2">{order.customer.email}</div>
@@ -219,6 +225,21 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 </div>
               ) : null}
             </Card>
+
+            {order.siteContactName || order.siteContactPhone ? (
+              <>
+                <div className="mt-6">
+                  <SectionTitle>At the site</SectionTitle>
+                </div>
+                <Card className="p-5 text-sm">
+                  <div className="font-semibold">{order.siteContactName ?? "Site contact"}</div>
+                  {order.siteContactPhone ? <div className="mt-1 text-ink-2">{order.siteContactPhone}</div> : null}
+                  <div className="mt-2 text-xs text-ink-2">
+                    The homeowner. {order.customer.name} is the client and pays.
+                  </div>
+                </Card>
+              </>
+            ) : null}
           </div>
         </section>
       </div>

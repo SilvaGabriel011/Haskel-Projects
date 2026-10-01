@@ -189,9 +189,21 @@ enum CustomerSource {
   WALK_IN
 }
 
+/// Who the client is. A company — a builder or kitchen firm hiring us for one
+/// of their own customers — is the client in its own right: it orders, it
+/// pays, and the homeowner is recorded on the job as the site contact.
+enum CustomerKind {
+  PERSON
+  COMPANY
+}
+
 model Customer {
   id        String         @id @default(cuid())
+  kind      CustomerKind   @default(PERSON)
+  /// A person's name, or a company's trading name.
   name      String
+  /// For a company: the person there you deal with.
+  contactName String?
   phone     String
   email     String?
   suburb    String
@@ -251,6 +263,11 @@ model Order {
   address       String
   suburb        String
   notes         String?
+
+  /// The person at the address, when they are not the client: the homeowner
+  /// a company has hired us for. Null when the client is the homeowner.
+  siteContactName  String?
+  siteContactPhone String?
 
   // Money. Admin-only — lib/queries never selects these for an employee.
   quoteCents   Int @default(0)

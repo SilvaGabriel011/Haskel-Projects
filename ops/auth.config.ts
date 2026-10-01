@@ -12,6 +12,7 @@ import type { NextAuthConfig } from "next-auth";
 import { NextResponse } from "next/server";
 import Google from "next-auth/providers/google";
 
+import { loginUrl } from "@/lib/login-url";
 import { canAccess, isRole, type Role } from "@/lib/roles";
 
 export default {
@@ -44,7 +45,7 @@ export default {
 
     /**
      * The route guard. Two denials, handled differently on purpose:
-     *  - not signed in        -> false, which sends them to /login
+     *  - not signed in        -> /login (lib/login-url.ts)
      *  - signed in, wrong role -> redirect to the dashboard carrying ?denied,
      *    so they are told why. Returning false would bounce them via /login,
      *    which would send them straight back with no explanation.
@@ -53,8 +54,10 @@ export default {
       const { pathname } = request.nextUrl;
       if (pathname === "/login") return true;
 
+      // Not signed in. Our own redirect rather than `false`, which would put
+      // the whole address, percent-encoded, into ?callbackUrl.
       const role = auth?.user?.role;
-      if (!isRole(role)) return false;
+      if (!isRole(role)) return NextResponse.redirect(loginUrl(request.nextUrl));
 
       if (!canAccess(role, pathname)) {
         const url = new URL("/dashboard", request.nextUrl.origin);

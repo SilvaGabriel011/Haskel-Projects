@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { auth, signIn } from "@/auth";
 import { DemoBanner } from "@/components/demo-banner";
+import { safeNext } from "@/lib/login-url";
 import { demoModeEnabled, listStaff, workspaceDomain, type Staff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -10,12 +11,15 @@ export const metadata: Metadata = { title: "Sign in" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
-  const session = await auth();
-  if (session?.user) redirect("/dashboard");
+  const { error, next: requested } = await searchParams;
+  // Back to the page they were heading for, if they followed a link in.
+  const next = safeNext(requested);
 
-  const { error } = await searchParams;
+  const session = await auth();
+  if (session?.user) redirect(next);
+
   const demo = demoModeEnabled();
   const domain = workspaceDomain();
 
@@ -82,7 +86,7 @@ export default async function LoginPage({
             className="mt-8"
             action={async () => {
               "use server";
-              await signIn("google", { redirectTo: "/dashboard" });
+              await signIn("google", { redirectTo: next });
             }}
           >
             <button
@@ -93,7 +97,7 @@ export default async function LoginPage({
             </button>
           </form>
 
-          {demo ? <DemoSignIn staff={await listStaff()} /> : null}
+          {demo ? <DemoSignIn staff={await listStaff()} next={next} /> : null}
         </div>
       </div>
       </main>
@@ -105,7 +109,7 @@ export default async function LoginPage({
  * Password sign-in for the seeded demo accounts. Rendered only while
  * DEMO_MODE is true; with it off, the provider does not exist at all.
  */
-function DemoSignIn({ staff }: { staff: Staff[] }) {
+function DemoSignIn({ staff, next }: { staff: Staff[]; next: string }) {
   return (
     <div className="mt-10 border-t border-line pt-8">
       <div className="flex items-center gap-2">
@@ -126,7 +130,7 @@ function DemoSignIn({ staff }: { staff: Staff[] }) {
           await signIn("demo", {
             email: String(formData.get("email") ?? ""),
             password: String(formData.get("password") ?? ""),
-            redirectTo: "/dashboard",
+            redirectTo: next,
           });
         }}
       >
