@@ -9,12 +9,13 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
 import { db } from "../lib/db";
-import { createJob, nextJobNumber, validateNewJob } from "../lib/new-job";
+import { createJob, nextJobNumber, phoneKey, validateNewJob } from "../lib/new-job";
 import { coloursOf, describeStone, finishOptions, thicknessOptions } from "../lib/stone";
 
 const FAR = new Date("2031-03-15T02:00:00Z");
 const TAG = `newjob-${Date.now()}`;
-const phone = (n: number) => `04${String(Date.now()).slice(-6)}${n}`.slice(0, 12);
+// A real-shaped mobile: 04 and eight more digits, unique to this run.
+const phone = (n: number) => `04${String(Date.now()).slice(-7)}${n}`;
 
 const person = {
   clientMode: "new",
@@ -85,6 +86,31 @@ describe("the New job form", () => {
       assert.ok(!r.ok, JSON.stringify(form));
       assert.match(r.reason, why);
     }
+  });
+});
+
+describe("what the form tidies rather than refuses", () => {
+  it("reads 2,4 as 2.4 square metres, and refuses what is not a plain decimal", () => {
+    const stone = { ...person, materialId: "m1", thicknessMm: "20", finish: "Polished" };
+    const r = validateNewJob({ ...stone, sqm: "2,4" });
+    assert.ok(r.ok && r.value.stone?.sqm === 2.4);
+    for (const bad of ["1e2", "0x10", "2.4m", "-1"]) {
+      assert.ok(!validateNewJob({ ...stone, sqm: bad }).ok, bad);
+    }
+  });
+
+  it("stores a known suburb the way run grouping reads it, and keeps an unknown town as typed", () => {
+    const known = validateNewJob({ ...person, suburb: "prospect sa 5082" });
+    assert.ok(known.ok && known.value.suburb === "Prospect");
+    const town = validateNewJob({ ...person, suburb: "Coober Pedy" });
+    assert.ok(town.ok && town.value.suburb === "Coober Pedy");
+  });
+
+  it("treats one phone number written three ways as one number", () => {
+    assert.equal(phoneKey("08 8370 1200"), "0883701200");
+    assert.equal(phoneKey("+61 8 8370 1200"), "0883701200");
+    assert.equal(phoneKey("(08) 8370-1200"), "0883701200");
+    assert.notEqual(phoneKey("08 8370 1201"), phoneKey("08 8370 1200"));
   });
 });
 
@@ -209,11 +235,13 @@ describe("opening the job", () => {
     assert.equal(o.siteContactName, null);
   });
 
-  it("will not make a second profile for a phone number already on file", async () => {
-    const p = phone(4);
+  it("will not make a second profile for a phone number already on file, however it is typed", async () => {
+    const p = phone(4); // e.g. "04123456784"
     assert.ok((await open({ ...person, clientName: `${TAG} First`, phone: p })).ok);
-    const dup = await open({ ...person, clientName: `${TAG} Again`, phone: p });
-    assert.ok(!dup.ok);
-    assert.match(dup.reason, /already has that phone number/);
+    for (const typed of [p, `${p.slice(0, 4)} ${p.slice(4, 7)} ${p.slice(7)}`, `+61 ${p.slice(1)}`]) {
+      const dup = await open({ ...person, clientName: `${TAG} Again`, phone: typed });
+      assert.ok(!dup.ok, typed);
+      assert.match(dup.reason, /already has that phone number/);
+    }
   });
 });

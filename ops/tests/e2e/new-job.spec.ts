@@ -30,7 +30,7 @@ test("a company's job opens with the homeowner and the stone attached", async ({
   await page.fill("#phone", `0400 ${stamp}`);
 
   await page.fill("#address", "12 Example St");
-  await page.selectOption("#suburb", "Prospect");
+  await page.fill("#suburb", "Prospect");
   await page.fill("#siteContactName", "Pat Homeowner");
 
   await page.selectOption("#jobType", "VANITY_TOP");
@@ -48,6 +48,35 @@ test("a company's job opens with the homeowner and the stone attached", async ({
   await expect(page.getByRole("heading", { level: 1 })).toContainText(`test kitchens ${stamp}`);
   await expect(page.getByText("Pat Homeowner")).toBeVisible();
   await expect(page.getByText(/· 30 mm ·/)).toBeVisible();
+});
+
+test("the suburb follows the client picked, takes a town off the list, and a typed one stays", async ({ page }) => {
+  await page.goto("/orders/new");
+  // The two seeded companies live in different suburbs.
+  const pick = (name: string) =>
+    page.locator("#customerId option", { hasText: name }).first().getAttribute("value");
+  await page.selectOption("#customerId", (await pick("Hills Kitchens"))!);
+  await expect(page.locator("#suburb")).toHaveValue("Stirling");
+  await page.selectOption("#customerId", (await pick("Seaview Builders"))!);
+  await expect(page.locator("#suburb")).toHaveValue("Glenelg");
+
+  await page.fill("#suburb", "Coober Pedy");
+  await page.selectOption("#customerId", (await pick("Hills Kitchens"))!);
+  await expect(page.locator("#suburb")).toHaveValue("Coober Pedy");
+});
+
+test("a dropped connection says so and lets you try again", async ({ page }) => {
+  await page.goto("/orders/new");
+  await page.selectOption("#customerId", { index: 1 });
+  await page.fill("#address", "1 Test St");
+  await page.selectOption("#jobType", "REPAIR");
+  // Lose the save request, as a phone dropping signal would.
+  await page.route("**/orders/new", (r) =>
+    r.request().method() === "POST" ? r.abort("internetdisconnected") : r.continue(),
+  );
+  await page.getByRole("button", { name: "Open the job" }).click();
+  await expect(page.locator("form").getByRole("alert")).toContainText("did not go through");
+  await expect(page.getByRole("button", { name: "Open the job" })).toBeEnabled();
 });
 
 test("an installer cannot open the New job page", async ({ browser }) => {
