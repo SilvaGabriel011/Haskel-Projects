@@ -475,7 +475,7 @@ export function AddStock({
                             </select>
                           </Field>
                         ) : null}
-                        <Field id="supplierChoice" label="Supplier">
+                        <Field id={suppliers.length > 0 ? "supplierChoice" : "materialSupplier"} label="Supplier">
                           {suppliers.length > 0 ? (
                             <select
                               id="supplierChoice"

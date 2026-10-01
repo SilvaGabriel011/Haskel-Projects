@@ -19,6 +19,7 @@ import { zonedParts } from "@/lib/business-time";
 import { db } from "@/lib/db";
 import { CUSTOMER_SOURCES, JOB_TYPES, defaultPipeline } from "@/lib/job-options";
 import { describeStone } from "@/lib/stone";
+import { normaliseSuburb } from "@/lib/suburbs";
 
 const MAX = { name: 80, phone: 30, email: 120, address: 160, suburb: 60, notes: 1000, finish: 40 };
 
@@ -46,6 +47,16 @@ export type NewJobInput = {
 export type Validated = { ok: true; value: NewJobInput } | { ok: false; reason: string };
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+
+/**
+ * A phone number reduced to what identifies it: digits only, with Australia's
+ * +61 written the local way. "08 8370 1200", "0883701200" and
+ * "+61 8 8370 1200" are one number, and must find one client.
+ */
+export function phoneKey(raw: string): string {
+  const d = raw.replace(/\D/g, "");
+  return d.startsWith("61") && d.length === 11 ? `0${d.slice(2)}` : d;
+}
 
 function phoneOf(v: unknown): string | null {
   const phone = str(v);
@@ -126,8 +137,11 @@ export function validateNewJob(f: Record<string, unknown>): Validated {
   const address = str(f.address);
   if (address.length < 3 || address.length > MAX.address) return { ok: false, reason: "Give the site address." };
 
-  const suburb = str(f.suburb);
-  if (suburb.length < 2 || suburb.length > MAX.suburb) return { ok: false, reason: "Give the suburb." };
+  const rawSuburb = str(f.suburb);
+  if (rawSuburb.length < 2 || rawSuburb.length > MAX.suburb) return { ok: false, reason: "Give the suburb." };
+  // "prospect sa 5082" is Prospect: stored the way the run grouping reads it.
+  // A town the list does not know is kept as typed.
+  const suburb = normaliseSuburb(rawSuburb) ?? rawSuburb;
 
   const notes = str(f.notes);
   if (notes.length > MAX.notes) return { ok: false, reason: "Those notes are too long." };
@@ -143,9 +157,11 @@ export function validateNewJob(f: Record<string, unknown>): Validated {
     const finish = str(f.finish);
     if (!finish || finish.length > MAX.finish) return { ok: false, reason: "Pick the finish." };
 
-    const rawSqm = str(f.sqm);
+    // "2,4" is how half the world writes 2.4. Anything else that is not a
+    // plain decimal ("1e2", "0x10") is a typo, not a number to guess at.
+    const rawSqm = str(f.sqm).replace(",", ".");
     const sqm = rawSqm ? Number(rawSqm) : 0;
-    if (!Number.isFinite(sqm) || sqm < 0 || sqm > 200) {
+    if (!/^\d*\.?\d*$/.test(rawSqm) || !Number.isFinite(sqm) || sqm < 0 || sqm > 200) {
       return { ok: false, reason: "Area should be square metres, such as 2.4." };
     }
     stone = { materialId, thicknessMm, finish, sqm: Math.round(sqm * 100) / 100 };
@@ -213,7 +229,18 @@ export async function createJob(input: NewJobInput, userId: string, now = new Da
           const c = input.client.create;
           // One profile per phone number, so a client's jobs stay together
           // instead of splitting across duplicates.
-          const same = await tx.customer.findFirst({ where: { phone: c.phone }, select: { name: true } });
+          // Matched on the number, not the typing: phones on file are stored as
+          // entered, spaces and all. Narrowed in the database by the last eight
+          // digits, which every format of one number shares, then compared exactly.
+          const key = phoneKey(c.phone);
+          // Two people entering the same new client at once would both find
+          // no match. Taking a lock on the number first makes the second wait,
+          // then find the first one's profile.
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"customer-phone:" + key}))`;
+          const nearby = await tx.$queryRaw<Array<{ name: string; phone: string }>>`
+            SELECT name, phone FROM "Customer"
+            WHERE regexp_replace(phone, '\\D', '', 'g') LIKE ${"%" + key.slice(-8)}`;
+          const same = nearby.find((x) => phoneKey(x.phone) === key);
           if (same) throw new Refused(`${same.name} already has that phone number. Pick them from the client list.`);
           const made = await tx.customer.create({ data: { ...c, suburb: input.suburb } });
           customerId = made.id;

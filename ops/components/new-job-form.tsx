@@ -79,13 +79,24 @@ export function NewJobForm({
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const res = await openJob({ ...v, clientKind: isCompany ? "COMPANY" : v.clientKind });
-    if (!res.ok) {
-      setError(res.reason);
+    // Sent as what the form shows, not what was last clicked: toggling
+    // "A company" while creating, then picking a person on file, leaves
+    // clientKind saying COMPANY.
+    const clientKind = isCompany ? "COMPANY" : "PERSON";
+    try {
+      const res = await openJob({ ...v, clientKind });
+      if (!res.ok) {
+        setError(res.reason);
+        setSaving(false);
+        return;
+      }
+      router.push(`/orders/${res.orderId}`);
+    } catch {
+      // A dropped connection or a server fault: say so, and let them try
+      // again, rather than leave the button stuck on "Opening…".
+      setError("That did not go through. Check the connection and try again. Nothing was saved.");
       setSaving(false);
-      return;
     }
-    router.push(`/orders/${res.orderId}`);
   }
 
   return (
@@ -110,8 +121,10 @@ export function NewJobForm({
               value={v.customerId ?? ""}
               onChange={(e) => {
                 const c = clients.find((x) => x.id === e.target.value);
-                // Their suburb is a fair first guess for where the work is.
-                set({ customerId: e.target.value, ...(c && !v.suburb ? { suburb: c.suburb } : {}) });
+                // Their suburb is a fair first guess for where the work is,
+                // and follows a change of client. One typed by hand stays.
+                const guessed = !v.suburb || v.suburb === picked?.suburb;
+                set({ customerId: e.target.value, ...(c && guessed ? { suburb: c.suburb } : {}) });
               }}
             >
               <option value="">Pick one…</option>
@@ -206,16 +219,22 @@ export function NewJobForm({
             />
           </Field>
           <Field id="suburb" label="Suburb">
-            <select id="suburb" className={field} value={v.suburb ?? ""} onChange={(e) => set({ suburb: e.target.value })}>
-              <option value="">Pick one…</option>
-              {/* A client's suburb from before the list existed stays pickable. */}
-              {v.suburb && !suburbs.includes(v.suburb) ? <option value={v.suburb}>{v.suburb}</option> : null}
+            {/* Suggestions, not a closed list: the list is Adelaide metro, and
+                a job in a town it does not know still has to be entered. */}
+            <input
+              id="suburb"
+              list="suburb-options"
+              autoComplete="off"
+              className={field}
+              value={v.suburb ?? ""}
+              onChange={(e) => set({ suburb: e.target.value })}
+              placeholder="Start typing…"
+            />
+            <datalist id="suburb-options">
               {suburbs.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s} />
               ))}
-            </select>
+            </datalist>
           </Field>
         </div>
 
