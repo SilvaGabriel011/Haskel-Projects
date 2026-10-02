@@ -15,6 +15,9 @@ import Google from "next-auth/providers/google";
 import { loginUrl } from "@/lib/login-url";
 import { canAccess, isRole, type Role } from "@/lib/roles";
 
+/** Where someone on a shared login picks themselves. */
+const WHO = "/who";
+
 export default {
   providers: [
     Google({
@@ -39,6 +42,8 @@ export default {
       if (session.user) {
         session.user.id = (token.sub ?? token.email ?? "") as string;
         session.user.role = (isRole(token.role) ? token.role : "EMPLOYEE") as Role;
+        session.user.owner = String(token.owner ?? token.email ?? "");
+        session.user.pending = token.pending === true;
       }
       return session;
     },
@@ -57,7 +62,15 @@ export default {
       // Not signed in. Our own redirect rather than `false`, which would put
       // the whole address, percent-encoded, into ?callbackUrl.
       const role = auth?.user?.role;
-      if (!isRole(role)) return NextResponse.redirect(loginUrl(request.nextUrl));
+      if (!auth?.user || !isRole(role)) return NextResponse.redirect(loginUrl(request.nextUrl));
+
+      // Signed in on a shared login, but not yet said who they are: nothing
+      // opens until they have. The session's role defaults to EMPLOYEE, so
+      // this check comes before any role check, not after.
+      if (auth.user.pending) {
+        return pathname === WHO ? true : NextResponse.redirect(new URL(WHO, request.nextUrl.origin));
+      }
+      if (pathname === WHO) return true;
 
       if (!canAccess(role, pathname)) {
         const url = new URL("/dashboard", request.nextUrl.origin);

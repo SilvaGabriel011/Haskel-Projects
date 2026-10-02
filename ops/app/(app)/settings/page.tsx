@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 
+import { AddPerson } from "@/components/add-person";
 import { PageHead } from "@/components/page-head";
 import { StaffRow } from "@/components/staff-row";
 import { Card, Pill, SectionTitle } from "@/components/ui";
 import { demoModeEnabled, workspaceDomain } from "@/lib/access-config";
 import { requireAdmin } from "@/lib/guard";
+import { recentActivity } from "@/lib/activity";
+import { formatDate } from "@/lib/business-time";
 import { CURRENT, RELEASES, releaseDate } from "@/lib/releases";
 import { db } from "@/lib/db";
 
@@ -13,14 +16,23 @@ export const metadata: Metadata = { title: "Settings" };
 export default async function SettingsPage() {
   const me = await requireAdmin();
 
-  const [staff, domain, demo] = await Promise.all([
+  const [rows, domain, demo, activity] = await Promise.all([
     db.user.findMany({
-      select: { id: true, email: true, name: true, role: true, active: true },
+      select: { id: true, email: true, name: true, role: true, active: true, pinHash: true },
       orderBy: [{ active: "desc" }, { role: "asc" }, { name: "asc" }],
     }),
     Promise.resolve(workspaceDomain()),
     Promise.resolve(demoModeEnabled()),
+    recentActivity(50),
   ]);
+  const staff = rows.map(({ pinHash, ...u }) => ({ ...u, hasPin: pinHash !== null }));
+
+  // Logins in use, and who is on each: two or more active makes it shared.
+  const logins = [...new Set(staff.map((s) => s.email))].map((email) => ({
+    email,
+    names: staff.filter((s) => s.email === email && s.active).map((s) => s.name),
+  }));
+  const isShared = (email: string) => (logins.find((l) => l.email === email)?.names.length ?? 0) > 1;
 
   const admins = staff.filter((s) => s.active && s.role === "ADMIN").length;
 
@@ -38,13 +50,70 @@ export default async function SettingsPage() {
         </SectionTitle>
         <Card className="divide-y divide-line">
           {staff.map((u) => (
-            <StaffRow key={u.id} user={u} isSelf={u.id === me.id} lastAdmin={u.active && u.role === "ADMIN" && admins === 1} />
+            <StaffRow
+              key={u.id}
+              user={u}
+              isSelf={u.id === me.id}
+              shared={isShared(u.email)}
+              lastAdmin={u.active && u.role === "ADMIN" && admins === 1}
+            />
           ))}
+        </Card>
+        <Card className="mt-4">
+          <div className="border-b border-line px-5 py-4">
+            <div className="text-sm font-semibold">Add a person</div>
+            <div className="text-xs text-ink-2">
+              With their own email, or one already in use such as info@: several people can share a login,
+              each with their own role and PIN.
+            </div>
+          </div>
+          <AddPerson logins={logins.filter((l) => l.names.length > 0)} />
         </Card>
         <p className="mt-3 max-w-2xl text-xs text-muted">
           An employee sees stock, offcuts, orders and their own schedule, and no money anywhere.
           An admin sees everything. You cannot remove your own admin or deactivate yourself, and
           the last admin cannot be demoted — otherwise nobody could reach the money again.
+        </p>
+      </section>
+
+      <section className="mt-10" id="activity">
+        <SectionTitle aside={<span className="text-xs text-ink-2">latest {activity.length}</span>}>
+          Activity
+        </SectionTitle>
+        <Card className="divide-y divide-line">
+          {activity.length === 0 ? (
+            <div className="px-5 py-4 text-sm text-ink-2">Nothing recorded yet.</div>
+          ) : (
+            activity.map((a) => (
+              <div key={a.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 py-3 text-sm">
+                <div className="min-w-0">
+                  {a.href ? (
+                    <a href={a.href} className="font-semibold underline-offset-4 hover:text-rose hover:underline">
+                      {a.summary}
+                    </a>
+                  ) : (
+                    <span className="font-semibold">{a.summary}</span>
+                  )}
+                  <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-ink-2">
+                    <span>
+                      <span className="text-muted">user</span> {a.userName}
+                    </span>
+                    <span>
+                      <span className="text-muted">owner</span> {a.ownerEmail}
+                    </span>
+                  </div>
+                </div>
+                <time dateTime={a.at.toISOString()} className="text-xs tabular-nums text-ink-2">
+                  {formatDate(a.at, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+                </time>
+              </div>
+            ))
+          )}
+        </Card>
+        <p className="mt-3 max-w-2xl text-xs text-muted">
+          Every change is put down to two people: the owner, the login that was signed in, and the user, the
+          person on it who did it. On a shared login like info@ they differ; on someone&rsquo;s own login they
+          are the same.
         </p>
       </section>
 

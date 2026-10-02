@@ -20,7 +20,8 @@ if (!target) {
 }
 
 const lines: string[] = [];
-for (const account of ["ADMIN", "INSTALLER", "APPRENTICE"]) {
+// INFO is the shared login (info@): two people on it, picked by PIN.
+for (const account of ["ADMIN", "INSTALLER", "APPRENTICE", "INFO"]) {
   const password = randomBytes(18).toString("base64url");
   console.log(`::add-mask::${password}`);
   lines.push(`DEMO_${account}_PASSWORD_HASH=${hashPassword(password)}`);

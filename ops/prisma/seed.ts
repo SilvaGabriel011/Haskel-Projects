@@ -98,6 +98,10 @@ const HOUR = 3_600_000;
 const MONTHS_BACK = 12;
 /** Midnight today, business time — so the demo is always "now". */
 const NOW = startOfDay(new Date());
+
+/** The seeded shared login and its demo PINs (tests/e2e/shared-login.spec.ts). */
+const SHARED_LOGIN = "info@haskelproject.com.au";
+const SHARED_PINS = { mia: "2580", tom: "1470" };
 const daysAgo = (d: number) => new Date(NOW.getTime() - d * 86_400_000);
 
 async function main() {
@@ -113,6 +117,7 @@ async function main() {
   await db.slab.deleteMany();
   await db.consumable.deleteMany();
   await db.material.deleteMany();
+  await db.activity.deleteMany();
   await db.user.deleteMany();
 
   // ---- people -----------------------------------------------------------
@@ -124,6 +129,14 @@ async function main() {
   ]);
   const [admin] = staff;
   const crew = staff.slice(1);
+
+  // A shared login: the office's info@, used by two people, each picking
+  // themselves with a PIN after signing in, each with their own role. Demo
+  // PINs only; the login itself still needs its demo password.
+  await Promise.all([
+    db.user.create({ data: { email: SHARED_LOGIN, name: "Mia Torres", role: "ADMIN", onboardedAt: new Date(), pinHash: hashPassword(SHARED_PINS.mia) } }),
+    db.user.create({ data: { email: SHARED_LOGIN, name: "Tom Nguyen", role: "EMPLOYEE", onboardedAt: new Date(), pinHash: hashPassword(SHARED_PINS.tom) } }),
+  ]);
 
   // ---- materials & consumables -----------------------------------------
   const materials = [];

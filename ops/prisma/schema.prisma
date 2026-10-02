@@ -24,9 +24,14 @@ enum Role {
   EMPLOYEE
 }
 
+/// A person who uses the app. Several people can share one sign-in email
+/// (info@…): each is their own User, with their own role, and proves who they
+/// are with a PIN after signing in. That email is the "owner" of what they do.
 model User {
   id        String   @id @default(cuid())
-  email     String   @unique
+  /// The Google account they sign in with. Not unique: a shared login has
+  /// one User per person.
+  email     String
   name      String
   role      Role     @default(EMPLOYEE)
   active    Boolean  @default(true)
@@ -37,12 +42,45 @@ model User {
   /// The last release they were told about (lib/releases.ts). Null means
   /// never, so the dashboard shows them the latest What's new once.
   seenVersion String?
+  /// scrypt hash of their 4-digit PIN. Needed only on a shared login, to pick
+  /// themselves after signing in. Null on a login of their own.
+  pinHash        String?
+  /// Wrong PINs in a row; five locks picking them for 15 minutes.
+  pinFailures    Int       @default(0)
+  pinLockedUntil DateTime?
 
-  movements StockMovement[]
-  shifts    ScheduleAssignee[]
+  movements  StockMovement[]
+  shifts     ScheduleAssignee[]
   stageMoves OrderStage[]
+  activities Activity[]
 
+  @@unique([email, name])
+  @@index([email])
   @@index([active])
+}
+
+/// Every action worth a record: who signed in (the owner, the login email) and
+/// which person on it did it (the user). Written alongside the change itself.
+model Activity {
+  id         String   @id @default(cuid())
+  at         DateTime @default(now())
+  /// The login used, e.g. info@haskelproject.com.au.
+  ownerEmail String
+  /// The person. Kept by name too, so the record reads the same after they leave.
+  userId     String?
+  userName   String
+  /// A stable key, e.g. "job.opened", for filtering.
+  action     String
+  /// What happened, in words: "Opened HP-2610-004 for Hills Kitchens".
+  summary    String
+  /// Where to see it.
+  href       String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([at])
+  @@index([ownerEmail, at])
+  @@index([userId, at])
 }
 
 // ---------------------------------------------------------------- stock

@@ -33,6 +33,24 @@ const EMPLOYEE: readonly Role[] = ["EMPLOYEE"];
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "1.6.0",
+    date: "2026-10-02",
+    title: "Shared logins",
+    items: [
+      {
+        text: "Several people can share one sign-in, such as info@. After signing in, each picks their name and types their own 4-digit PIN, and keeps their own role.",
+      },
+      {
+        text: "On a shared login, “Switch person” in the menu hands over to someone else without signing out.",
+      },
+      {
+        text: "Settings: add a person to their own login or a shared one, set their PIN, and see the activity, with every change put down to the owner (the login) and the user (the person).",
+        roles: ADMIN,
+        href: "/settings#activity",
+      },
+    ],
+  },
+  {
     version: "1.5.0",
     date: "2026-10-02",
     title: "Every stone to pick from",

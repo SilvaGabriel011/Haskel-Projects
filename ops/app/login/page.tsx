@@ -143,9 +143,11 @@ function DemoSignIn({ staff, next }: { staff: Staff[]; next: string }) {
           defaultValue={staff[0]?.email}
           className="rounded-xl border border-line bg-white px-4 py-3 text-sm"
         >
-          {staff.map((s) => (
-            <option key={s.email} value={s.email}>
-              {s.name} — {s.role === "ADMIN" ? "admin" : "employee"}
+          {logins(staff).map(({ email, people }) => (
+            <option key={email} value={email}>
+              {people.length > 1
+                ? `${email} — shared: ${people.map((p) => p.name.split(" ")[0]).join(", ")}`
+                : `${people[0].name} — ${people[0].role === "ADMIN" ? "admin" : "employee"}`}
             </option>
           ))}
         </select>
@@ -174,4 +176,11 @@ function DemoSignIn({ staff, next }: { staff: Staff[]; next: string }) {
       </form>
     </div>
   );
+}
+
+/** The staff grouped by the login they sign in with: a shared one appears once. */
+function logins(staff: Staff[]) {
+  const by = new Map<string, Staff[]>();
+  for (const s of staff) by.set(s.email, [...(by.get(s.email) ?? []), s]);
+  return [...by].map(([email, people]) => ({ email, people }));
 }

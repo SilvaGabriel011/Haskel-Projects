@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 
-import { setActive, setRole } from "@/app/(app)/settings/actions";
+import { setActive, setPin, setRole } from "@/app/(app)/settings/actions";
 import { Pill } from "@/components/ui";
 import type { Role } from "@/lib/roles";
 
@@ -10,9 +10,12 @@ export function StaffRow({
   user,
   isSelf,
   lastAdmin = false,
+  shared = false,
 }: {
-  user: { id: string; email: string; name: string; role: Role; active: boolean };
+  user: { id: string; email: string; name: string; role: Role; active: boolean; hasPin: boolean };
   isSelf: boolean;
+  /** Others sign in with the same email, so this person picks themselves with a PIN. */
+  shared?: boolean;
   /** The only active admin: demoting or deactivating them would lock everyone out. */
   lastAdmin?: boolean;
 }) {
@@ -25,6 +28,8 @@ export function StaffRow({
       : null;
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pin, setPinValue] = useState("");
 
   const run = (fn: () => Promise<{ ok: boolean; reason?: string }>) =>
     start(async () => {
@@ -41,6 +46,8 @@ export function StaffRow({
               <span className="font-semibold">{user.name}</span>
               {isSelf ? <span className="text-xs text-muted">(you)</span> : null}
               {!user.active ? <Pill tone="gone">inactive</Pill> : null}
+              {shared ? <Pill>shared login</Pill> : null}
+              {shared && user.active && !user.hasPin ? <Pill tone="warn">no PIN</Pill> : null}
             </div>
             <div className="truncate text-xs text-ink-2">{user.email}</div>
           </div>
@@ -75,8 +82,55 @@ export function StaffRow({
           >
             {user.active ? "Deactivate" : "Reactivate"}
           </button>
+
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => setPinOpen((o) => !o)}
+            className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-semibold text-ink-2 transition hover:border-rose hover:text-rose"
+          >
+            {user.hasPin ? "Change PIN" : "Set PIN"}
+          </button>
         </div>
       </div>
+
+      {pinOpen ? (
+        <form
+          className="mt-3 flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(async () => {
+              const res = await setPin(user.id, pin);
+              if (res.ok) {
+                setPinOpen(false);
+                setPinValue("");
+              }
+              return res;
+            });
+          }}
+        >
+          <label htmlFor={`pin-${user.id}`} className="text-xs text-ink-2">
+            New 4-digit PIN for {user.name}
+          </label>
+          <input
+            id={`pin-${user.id}`}
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            maxLength={4}
+            value={pin}
+            onChange={(e) => setPinValue(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            className="w-24 rounded-lg border border-line bg-white px-3 py-1.5 text-center text-sm tracking-[0.4em]"
+          />
+          <button
+            type="submit"
+            disabled={pending || pin.length !== 4}
+            className="rounded-full bg-rose px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            Save PIN
+          </button>
+        </form>
+      ) : null}
 
       {error ? (
         <p role="alert" className="mt-3 rounded-xl border border-rose bg-blush px-4 py-2 text-xs">

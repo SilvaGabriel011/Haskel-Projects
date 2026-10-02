@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { record } from "@/lib/activity";
 import { requireAdmin } from "@/lib/guard";
 import { addStock } from "@/lib/stock-create";
 import { validateStock } from "@/lib/stock-input";
@@ -25,6 +26,7 @@ export async function createStock(form: Record<string, unknown>) {
   try {
     const result = await addStock(parsed.value, me.id);
     if (result.ok) {
+      await record(me, "stock.added", `Added ${result.ref} to stock`, result.href);
       revalidatePath("/stock");
       if (parsed.value.kind === "OFFCUT") revalidatePath("/offcuts");
     }
