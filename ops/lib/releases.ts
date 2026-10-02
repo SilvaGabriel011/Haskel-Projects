@@ -33,6 +33,18 @@ const EMPLOYEE: readonly Role[] = ["EMPLOYEE"];
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "1.7.0",
+    date: "2026-10-02",
+    title: "Google Calendar",
+    items: [
+      {
+        text: "Accepted bookings can now go into the company Google Calendar. Settings shows whether it is connected, and “Send a test event” checks it end to end.",
+        roles: ADMIN,
+        href: "/settings",
+      },
+    ],
+  },
+  {
     version: "1.6.0",
     date: "2026-10-02",
     title: "Shared logins",

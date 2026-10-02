@@ -35,7 +35,10 @@ export async function acceptBooking(id: string, at?: string, confirmConflicts = 
     jobNumber: res.jobNumber,
     customerName: res.request.name,
     customerPhone: res.request.phone,
+    // The admin who accepts is the one booked to measure (lib/booking-accept.ts).
+    crew: [me.name],
   });
+  if (!sync.ok && sync.reason === "failed") console.error("[calendar]", sync.detail);
   if (sync.ok) {
     await db.scheduleEvent.update({ where: { id: res.eventId }, data: { googleEventId: sync.googleEventId } });
   }

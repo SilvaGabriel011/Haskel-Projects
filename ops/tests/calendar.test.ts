@@ -100,9 +100,10 @@ describe("business timezone", () => {
   });
 
   it("keeps sync off without a zone even when Google is set up", () => {
-    const keys = ["GOOGLE_CALENDAR_ID", "AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET"] as const;
+    const keys = ["GOOGLE_CALENDAR_ID", "GOOGLE_SERVICE_ACCOUNT_JSON"] as const;
     const prev = keys.map((k) => process.env[k]);
-    keys.forEach((k) => (process.env[k] = "x"));
+    process.env.GOOGLE_CALENDAR_ID = "x";
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON = JSON.stringify({ client_email: "a@b.iam.gserviceaccount.com", private_key: "k" });
     try {
       withTz(undefined, () => assert.equal(calendarConfigured(), false));
       withTz("Australia/Perth", () => assert.equal(calendarConfigured(), true));

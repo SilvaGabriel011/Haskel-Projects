@@ -20,7 +20,7 @@ The two deploy independently and neither can break the other.
 | 7 | Hardening and handover | Done |
 | — | Settings (people and access) | Done |
 | 8a | Booking requests from the website | Done |
-| 8b | Calendar sync on accept | **Wired, waiting on credentials** |
+| 8b | Calendar sync on accept | Done; needs the service account key (below) |
 | 9 | Putting stock on the rack by hand | Done |
 | 10 | Follow-up board (overdue, missing detail) | Done |
 | 11 | Eleven stages and the stage timeline | Done |
@@ -191,13 +191,13 @@ the next year, and a job-type list narrower than the internal enum. The rate
 limit is per serverless instance, which slows a casual flood rather than
 stopping a determined one — if real spam turns up, put Turnstile in front.
 
-**Google Calendar sync is deliberately not implemented yet.** The half that can
-be tested without Google — turning a booking into a calendar event, with the
-right timezone and the site notes an installer needs — is written and unit
-tested in `lib/google-calendar.ts`. The network call is not, because writing an
-untested API call would look finished without being so. Until credentials
-exist, sync returns `not-configured` and scheduling works regardless: the
-booking is the record, the calendar is only a copy of it.
+**Google Calendar sync** writes an accepted booking to one company calendar,
+through a Google service account: a robot login only this app uses, so nobody's
+personal Google account is tied to it and nothing asks anyone to sign in. Until
+it is set up, sync returns `not-configured` and scheduling works regardless:
+the booking is the record, the calendar is only a copy of it. A failure on
+Google's side is logged and never stops a booking. Settings shows the real
+state and has **Send a test event**, which writes an event and deletes it.
 
 ## Running it
 
@@ -357,9 +357,24 @@ public site from `haskel-site/`.
    - `https://ops.haskelproject.com.au/api/auth/callback/google`
 6. Copy the client ID and secret into `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`
 7. `GOOGLE_WORKSPACE_DOMAIN` is already set to `haskelproject.com.au`
-8. For calendar sync, also set `GOOGLE_CALENDAR_ID` (a throwaway calendar
-   first) and `BUSINESS_TIMEZONE` (`Australia/Adelaide`).
-   Sync stays off until both are set, rather than guessing a timezone.
+8. Calendar sync, in the same Google Cloud project:
+   1. IAM & Admin → Service accounts → **Create service account**, named e.g.
+      `haskel-ops-calendar`. No roles needed. Note its email
+      (`…@….iam.gserviceaccount.com`).
+   2. Open it → Keys → Add key → **JSON**. A file downloads. Keep it private.
+   3. In Google Calendar, make a **test** calendar first. Its Settings and
+      sharing → Share with specific people → add the service account's email
+      with **Make changes to events**. Integrate calendar → copy the Calendar ID.
+   4. In Vercel, set:
+      - `GOOGLE_SERVICE_ACCOUNT_JSON`: the whole downloaded file, pasted as is
+      - `GOOGLE_CALENDAR_ID`: the Calendar ID
+      - `BUSINESS_TIMEZONE`: `Australia/Adelaide`
+   5. Redeploy, open Settings → **Send a test event**. It says exactly what is
+      wrong if anything is. Once it works, share the real company calendar the
+      same way and change `GOOGLE_CALENDAR_ID` to it.
+
+   Staff are named in the event, not invited: a service account cannot send
+   invitations without Workspace-wide delegation.
 
 **In production, Google sign-in is refused until `GOOGLE_WORKSPACE_DOMAIN` is
 set.** Not "restricted to the staff list" — refused. Without it there is no way
