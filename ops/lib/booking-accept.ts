@@ -20,6 +20,7 @@ import { Prisma, type BookingRequest } from "@prisma/client";
 import { zonedParts } from "@/lib/business-time";
 import { db } from "@/lib/db";
 import { findTimeConflicts, type TimeConflict } from "@/lib/conflicts";
+import { customerWithPhone } from "@/lib/new-job";
 
 export const MEASURE_MINUTES = 60;
 
@@ -85,9 +86,11 @@ export async function acceptBookingRequest(input: {
         });
         if (claimed.count === 0) throw new AlreadyDecided();
 
-        // Match an existing customer on phone before making a duplicate.
+        // Match an existing customer on phone before making a duplicate. By
+        // the number, not the typing: "+61 8 8370 1200" from the website is
+        // the "08 8370 1200" the office has on file.
         const customer =
-          (await tx.customer.findFirst({ where: { phone: req.phone } })) ??
+          (await customerWithPhone(tx, req.phone)) ??
           (await tx.customer.create({
             data: { name: req.name, phone: req.phone, email: req.email, suburb: req.suburb, source: "WEBSITE" },
           }));
@@ -106,6 +109,12 @@ export async function acceptBookingRequest(input: {
             suburb: req.suburb,
             notes: req.notes,
           },
+        });
+
+        // Open the first stage, as New job does, so the timeline and the
+        // follow-up board count this job's days from the moment it was accepted.
+        await tx.orderStage.create({
+          data: { orderId: order.id, stage: "INITIAL", enteredAt: now, movedById: input.userId },
         });
 
         const event = await tx.scheduleEvent.create({

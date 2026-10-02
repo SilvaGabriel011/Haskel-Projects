@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
+import { CURRENT, itemsFor } from "../../lib/releases";
+
 /**
  * Telling people already using the app what changed, once, and where the
  * version lives. Needs a freshly seeded database, where nobody has seen the
@@ -22,9 +24,12 @@ test("an installer is told once what changed for them, and Got it puts it away",
   await page.goto("/dashboard");
   const card = page.getByRole("region", { name: "What’s new" });
   await expect(card).toContainText(`Version ${version}`);
-  await expect(card).toContainText("At the site");
+  // Read from the release itself, so a new release does not break the test.
+  for (const item of itemsFor(CURRENT, "EMPLOYEE")) await expect(card).toContainText(item.text);
   // Admin-only news is not theirs.
-  await expect(card).not.toContainText("New job on Orders");
+  for (const item of CURRENT.items.filter((i) => i.roles && !i.roles.includes("EMPLOYEE"))) {
+    await expect(card).not.toContainText(item.text);
+  }
 
   await card.getByRole("button", { name: "Got it" }).click();
   await expect(card).toHaveCount(0);
