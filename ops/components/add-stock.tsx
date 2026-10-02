@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { createStock } from "@/app/(app)/stock/actions";
 import { coloursOf, finishOptions, supplierOptions, thicknessOptions } from "@/lib/stone";
+import { catalogueKey, fromCatalogueKey, isCatalogueKey, onFileFor, rangesOf } from "@/lib/stone-catalogue";
 import {
   MATERIAL_KINDS,
   MATERIAL_KIND_LABEL,
@@ -93,11 +94,16 @@ export function AddStock({
   const kind = (values.kind as StockKind | undefined) ?? null;
   const steps = stepsFor(kind);
   const last = steps.length - 1;
-  const usingNewMaterial = values.materialChoice === NEW_MATERIAL || materials.length === 0;
+  const choice = String(values.materialChoice ?? "");
+  // A colour from the catalogue is a new material with most of it filled in.
+  const catalogued = isCatalogueKey(choice) ? fromCatalogueKey(choice) : null;
+  const usingNewMaterial = choice === NEW_MATERIAL || catalogued !== null;
   const stoneType = String(values.stoneType ?? "") as MaterialKind | "";
   const colours = coloursOf(materials, stoneType);
-  const thicknesses = thicknessOptions(materials.map((m) => m.thicknessMm));
-  const finishes = finishOptions(materials.map((m) => m.finish));
+  const thicknesses = catalogued
+    ? [...catalogued.thicknesses]
+    : thicknessOptions(materials.map((m) => m.thicknessMm));
+  const finishes = catalogued ? [...catalogued.finishes] : finishOptions(materials.map((m) => m.finish));
   const suppliers = supplierOptions(materials.map((m) => m.supplier));
   const newSupplier = values.supplierChoice === NEW_SUPPLIER || suppliers.length === 0;
   // An offcut comes off a slab of its own colour; a colour new today has none.
@@ -385,71 +391,110 @@ export function AddStock({
 
               {kind !== "CONSUMABLE" && step === 1 ? (
                 <>
-                  {materials.length > 0 ? (
-                    <div className="grid gap-5 sm:grid-cols-2">
-                      <Field id="stoneType" label="Type of stone">
-                        <select
-                          id="stoneType"
-                          className={field}
-                          value={stoneType}
-                          onChange={(e) =>
-                            setValues((prev) => ({
-                              ...prev,
-                              stoneType: e.target.value,
-                              // A colour belongs to one type; changing type clears it.
-                              materialChoice: "",
-                              materialId: "",
-                              materialKind: e.target.value,
-                              parentSlabId: "",
-                            }))
-                          }
-                        >
-                          <option value="">Pick one…</option>
-                          {MATERIAL_KINDS.map((k) => (
-                            <option key={k} value={k}>
-                              {MATERIAL_KIND_LABEL[k]}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                      <Field id="materialChoice" label="Colour">
-                        <select
-                          id="materialChoice"
-                          className={field}
-                          disabled={!stoneType}
-                          value={String(values.materialChoice ?? "")}
-                          onChange={(e) => {
-                            const choice = e.target.value;
-                            const m = materials.find((x) => x.id === choice);
-                            setValues((prev) => ({
-                              ...prev,
-                              materialChoice: choice,
-                              materialId: choice === NEW_MATERIAL ? "" : choice,
-                              // The slab it came off is the same stone, so a new colour clears it.
-                              parentSlabId: "",
-                              // An offcut starts from its material's own thickness and finish.
-                              ...(m && prev.kind === "OFFCUT"
-                                ? { thicknessMm: String(m.thicknessMm), finish: m.finish }
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Field id="stoneType" label="Type of stone">
+                      <select
+                        id="stoneType"
+                        className={field}
+                        value={stoneType}
+                        onChange={(e) =>
+                          setValues((prev) => ({
+                            ...prev,
+                            stoneType: e.target.value,
+                            // A colour belongs to one type; changing type clears it.
+                            materialChoice: "",
+                            materialId: "",
+                            materialKind: e.target.value,
+                            parentSlabId: "",
+                          }))
+                        }
+                      >
+                        <option value="">Pick one…</option>
+                        {MATERIAL_KINDS.map((k) => (
+                          <option key={k} value={k}>
+                            {MATERIAL_KIND_LABEL[k]}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field id="materialChoice" label="Colour">
+                      <select
+                        id="materialChoice"
+                        className={field}
+                        disabled={!stoneType}
+                        value={String(values.materialChoice ?? "")}
+                        onChange={(e) => {
+                          const choice = e.target.value;
+                          const m = materials.find((x) => x.id === choice);
+                          const pick = isCatalogueKey(choice) ? fromCatalogueKey(choice) : null;
+                          const t = pick
+                            ? String(pick.thicknesses.includes(20) ? 20 : pick.thicknesses[0])
+                            : "";
+                          setValues((prev) => ({
+                            ...prev,
+                            materialChoice: choice,
+                            materialId: m ? choice : "",
+                            // A catalogue colour fills in the new material: name,
+                            // supplier, and what it is made in. Only the cost is left.
+                            // "Not on the list" starts empty.
+                            ...(pick
+                              ? {
+                                  materialName: pick.fullName,
+                                  materialKind: pick.range.kind,
+                                  materialFinish: pick.finishes[0],
+                                  materialThicknessMm: t,
+                                  supplierChoice: suppliers.includes(pick.range.supplier)
+                                    ? pick.range.supplier
+                                    : NEW_SUPPLIER,
+                                  materialSupplier: pick.range.supplier,
+                                }
+                              : choice === NEW_MATERIAL
+                                ? {
+                                    materialName: "",
+                                    materialFinish: "",
+                                    materialThicknessMm: "",
+                                    supplierChoice: "",
+                                    materialSupplier: "",
+                                  }
                                 : {}),
-                            }));
-                            setError(null);
-                          }}
-                        >
-                          <option value="">{stoneType ? "Pick one…" : "Pick the type first"}</option>
-                          {colours.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.name} — {m.finish}, {m.thicknessMm} mm
-                            </option>
-                          ))}
-                          <option value={NEW_MATERIAL}>＋ A colour not on the list</option>
-                        </select>
-                      </Field>
-                    </div>
-                  ) : (
-                    <p className="rounded-xl border border-line bg-white px-4 py-3 text-sm text-ink-2">
-                      No materials on file yet, so this one is the first.
-                    </p>
-                  )}
+                            // The slab it came off is the same stone, so a new colour clears it.
+                            parentSlabId: "",
+                            // An offcut starts from its material's own thickness and finish.
+                            ...(m && prev.kind === "OFFCUT"
+                              ? { thicknessMm: String(m.thicknessMm), finish: m.finish }
+                              : pick && prev.kind === "OFFCUT"
+                                ? { thicknessMm: t, finish: pick.finishes[0] }
+                                : {}),
+                          }));
+                          setError(null);
+                        }}
+                      >
+                        <option value="">{stoneType ? "Pick one…" : "Pick the type first"}</option>
+                        {colours.length > 0 ? (
+                          <optgroup label="On file">
+                            {colours.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name} — {m.finish}, {m.thicknessMm} mm
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
+                        {/* The rest of each range, so the first slab of a colour is a pick too. */}
+                        {rangesOf(stoneType).map((range) => (
+                          <optgroup key={range.id} label={range.label}>
+                            {range.colours
+                              .filter((colour) => !onFileFor({ range, colour }, materials))
+                              .map((colour) => (
+                                <option key={colour.name} value={catalogueKey(range, colour)}>
+                                  {colour.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        ))}
+                        <option value={NEW_MATERIAL}>＋ A colour not on the list</option>
+                      </select>
+                    </Field>
+                  </div>
 
                   {usingNewMaterial ? (
                     <div className="grid gap-5 rounded-[18px] border border-line bg-white p-5">
@@ -463,24 +508,6 @@ export function AddStock({
                         />
                       </Field>
                       <div className="grid gap-5 sm:grid-cols-2">
-                        {/* Picked above when there is a list to pick from. */}
-                        {materials.length === 0 ? (
-                          <Field id="materialKind" label="Kind">
-                            <select
-                              id="materialKind"
-                              className={field}
-                              value={String(values.materialKind ?? "")}
-                              onChange={(e) => set("materialKind", e.target.value)}
-                            >
-                              <option value="">Pick one…</option>
-                              {MATERIAL_KINDS.map((k) => (
-                                <option key={k} value={k}>
-                                  {MATERIAL_KIND_LABEL[k]}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-                        ) : null}
                         <Field id={suppliers.length > 0 ? "supplierChoice" : "materialSupplier"} label="Supplier">
                           {suppliers.length > 0 ? (
                             <select

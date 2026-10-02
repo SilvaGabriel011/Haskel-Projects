@@ -33,6 +33,27 @@ const EMPLOYEE: readonly Role[] = ["EMPLOYEE"];
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "1.5.0",
+    date: "2026-10-02",
+    title: "Every stone to pick from",
+    items: [
+      {
+        text: "New job lists the stone the trade sells, not just what is on the rack: pick the type, then the brand or stone, then the colour. Thickness and finish then offer only what that colour is made in.",
+        roles: ADMIN,
+        href: "/orders/new",
+      },
+      {
+        text: "Add stock offers the same colours. Picking one fills in its name, supplier, thickness and finish, so only the cost is left.",
+        roles: ADMIN,
+        href: "/stock",
+      },
+      {
+        text: "Engineered stone lists only silica-free ranges, as the law has required since July 2024.",
+        roles: ADMIN,
+      },
+    ],
+  },
+  {
     version: "1.4.1",
     date: "2026-10-02",
     title: "Fixes",
@@ -154,8 +175,9 @@ export function itemsFor(release: Release, role: Role): ReleaseItem[] {
  *
  * Only people already using the app: someone new is shown round by the
  * walkthrough instead. Everything since the version they last saw, newest
- * first; someone who has never seen one gets the latest release only, not
- * the whole history. A release with nothing for their role is skipped.
+ * first; someone who has never seen one gets the latest release with
+ * something for their role, not the whole history. A release with nothing
+ * for their role is skipped.
  */
 export function whatsNewFor(
   user: { onboardedAt: Date | null; seenVersion: string | null },
@@ -164,8 +186,10 @@ export function whatsNewFor(
   if (user.onboardedAt === null || user.seenVersion === CURRENT.version) return null;
 
   const seenAt = RELEASES.findIndex((r) => r.version === user.seenVersion);
-  // Unknown or never seen: just the latest.
-  const unseen = seenAt === -1 ? [CURRENT] : RELEASES.slice(0, seenAt);
+  // Unknown or never seen: just the latest that has something for them, so
+  // an office-only release does not leave the installers with nothing.
+  const latestForRole = RELEASES.find((r) => itemsFor(r, role).length > 0);
+  const unseen = seenAt === -1 ? (latestForRole ? [latestForRole] : []) : RELEASES.slice(0, seenAt);
 
   const shown = unseen
     .map((release) => ({ release, items: itemsFor(release, role) }))

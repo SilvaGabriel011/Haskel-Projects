@@ -35,9 +35,11 @@ test("a company's job opens with the homeowner and the stone attached", async ({
 
   await page.selectOption("#jobType", "VANITY_TOP");
 
-  // Colour waits for the type; thickness and finish fill in from the colour.
+  // Each list waits for the one before; thickness and finish fill in from the colour.
+  await expect(page.locator("#stoneRange")).toBeDisabled();
   await expect(page.locator("#materialId")).toBeDisabled();
   await page.selectOption("#stoneType", "ENGINEERED");
+  await page.selectOption("#stoneRange", "file");
   const colour = await page.locator("#materialId option").nth(1).getAttribute("value");
   await page.selectOption("#materialId", colour!);
   await expect(page.locator("#thicknessMm")).not.toHaveValue("");
@@ -48,6 +50,29 @@ test("a company's job opens with the homeowner and the stone attached", async ({
   await expect(page.getByRole("heading", { level: 1 })).toContainText(`test kitchens ${stamp}`);
   await expect(page.getByText("Pat Homeowner")).toBeVisible();
   await expect(page.getByText(/· 30 mm ·/)).toBeVisible();
+});
+
+test("the stone narrows step by step to what the colour is made in", async ({ page }) => {
+  await page.goto("/orders/new");
+  const options = (id: string) =>
+    page.locator(`#${id} option:not([value=""])`).evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+
+  await page.selectOption("#stoneType", "SINTERED");
+  expect(await options("stoneRange")).toEqual(expect.arrayContaining(["dekton", "neolith"]));
+  await page.selectOption("#stoneRange", "neolith");
+  await page.selectOption("#materialId", "cat:neolith:Arctic White");
+  // Made 12 mm only, so it is picked; and only its own finishes are offered.
+  await expect(page.locator("#thicknessMm")).toHaveValue("12");
+  expect(await options("thicknessMm")).toEqual(["12"]);
+  expect(await options("finish")).toEqual(["Silk", "Polished", "Satin"]);
+
+  // Changing the brand clears the colour and what followed it.
+  await page.selectOption("#stoneRange", "dekton");
+  await expect(page.locator("#materialId")).toHaveValue("");
+  await expect(page.locator("#thicknessMm")).toBeDisabled();
+  await page.selectOption("#materialId", "cat:dekton:Lunar");
+  expect(await options("thicknessMm")).toEqual(["12", "20", "30"]);
+  expect(await options("finish")).toEqual(["Matte"]);
 });
 
 test("the suburb follows the client picked, takes a town off the list, and a typed one stays", async ({ page }) => {
@@ -91,6 +116,19 @@ test("an installer cannot open the New job page", async ({ browser }) => {
   await page.goto("/orders");
   await expect(page.getByRole("link", { name: "New job" })).toHaveCount(0);
   await page.close();
+});
+
+test("a colour from the catalogue fills in the new material, leaving only the cost", async ({ page }) => {
+  await page.goto("/stock");
+  await page.getByRole("button", { name: "Add stock" }).click();
+  await page.getByRole("button", { name: /A slab/ }).click();
+  await page.selectOption("#stoneType", "ENGINEERED");
+  await page.selectOption("#materialChoice", "cat:caesarstone-mineral:Rugged Concrete");
+  await expect(page.locator("#materialName")).toHaveValue("Caesarstone Rugged Concrete");
+  await expect(page.locator("#materialFinish")).toHaveValue("Rough");
+  await expect(page.locator("#materialThicknessMm")).toHaveValue("20");
+  await expect(page.locator("#materialSupplier")).toHaveValue("Caesarstone");
+  await expect(page.locator("#materialCostPerSqm")).toHaveValue("");
 });
 
 test("adding stock picks the stone from dropdowns", async ({ page }) => {
