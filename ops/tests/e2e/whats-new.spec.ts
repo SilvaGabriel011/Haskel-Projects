@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
-import { CURRENT, itemsFor } from "../../lib/releases";
+import { whatsNewFor } from "../../lib/releases";
 
 /**
  * Telling people already using the app what changed, once, and where the
@@ -23,11 +23,13 @@ test("an installer is told once what changed for them, and Got it puts it away",
   await signIn(page, "installer@haskelproject.com.au", process.env.E2E_INSTALLER_PASSWORD ?? "");
   await page.goto("/dashboard");
   const card = page.getByRole("region", { name: "What’s new" });
-  await expect(card).toContainText(`Version ${version}`);
-  // Read from the release itself, so a new release does not break the test.
-  for (const item of itemsFor(CURRENT, "EMPLOYEE")) await expect(card).toContainText(item.text);
+  // What a freshly seeded installer is owed, by the rule itself, so a new
+  // release does not break the test.
+  const owed = whatsNewFor({ onboardedAt: new Date(), seenVersion: null }, "EMPLOYEE")!;
+  await expect(card).toContainText(`Version ${owed[0].release.version}`);
+  for (const item of owed[0].items) await expect(card).toContainText(item.text);
   // Admin-only news is not theirs.
-  for (const item of CURRENT.items.filter((i) => i.roles && !i.roles.includes("EMPLOYEE"))) {
+  for (const item of owed[0].release.items.filter((i) => i.roles && !i.roles.includes("EMPLOYEE"))) {
     await expect(card).not.toContainText(item.text);
   }
 

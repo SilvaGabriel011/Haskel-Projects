@@ -80,6 +80,10 @@ describe("the New job form", () => {
       [{ ...person, materialId: "m1", thicknessMm: "20", finish: "" }, /finish/],
       [{ ...person, materialId: "m1", thicknessMm: "20", finish: "Polished", sqm: "lots" }, /square metres/],
       [{ ...person, clientKind: "COMPANY", siteContactPhone: "12" }, /site contact/],
+      // A catalogue colour holds to what it is made in.
+      [{ ...person, materialId: "cat:dekton:Lunar", thicknessMm: "40", finish: "Matte" }, /not made 40 mm/],
+      [{ ...person, materialId: "cat:dekton:Lunar", thicknessMm: "20", finish: "Polished" }, /polished finish/],
+      [{ ...person, materialId: "cat:dekton:Nobody", thicknessMm: "20", finish: "Matte" }, /not on the list/],
     ];
     for (const [form, why] of cases) {
       const r = validateNewJob(form);
@@ -208,6 +212,36 @@ describe("opening the job", () => {
     assert.equal(o.lines.length, 1);
     assert.equal(o.lines[0].description, `${material.name} · 30 mm · Honed`);
     assert.equal(o.lines[0].sqm, 2.4);
+  });
+
+  it("names a catalogue colour not on file on the job, with no material until it arrives", async () => {
+    const r = await open({
+      ...person, clientName: `${TAG} Catalogue`, phone: phone(5),
+      materialId: "cat:neolith:Arctic White", thicknessMm: "12", finish: "Silk",
+    });
+    assert.ok(r.ok, r.ok ? "" : r.reason);
+    const [line] = await db.orderLine.findMany({ where: { orderId: r.orderId } });
+    assert.equal(line.description, "Neolith Arctic White · 12 mm · Silk");
+    assert.equal(line.materialId, null, "no material made up with no cost, which would read as free stone");
+  });
+
+  it("links a catalogue colour to the material on file of that colour", async () => {
+    const m = await db.material.create({
+      data: { name: "Dekton Kreta", kind: "SINTERED", supplier: "Cosentino", finish: "Matte", costPerSqmCents: 1 },
+    });
+    try {
+      const r = await open({
+        ...person, clientName: `${TAG} Linked`, phone: phone(6),
+        materialId: "cat:dekton:Kreta", thicknessMm: "20", finish: "Matte",
+      });
+      assert.ok(r.ok, r.ok ? "" : r.reason);
+      const [line] = await db.orderLine.findMany({ where: { orderId: r.orderId } });
+      assert.equal(line.materialId, m.id);
+      assert.equal(line.description, "Dekton Kreta · 20 mm · Matte");
+    } finally {
+      await db.orderLine.deleteMany({ where: { materialId: m.id } });
+      await db.material.delete({ where: { id: m.id } });
+    }
   });
 
   it("files a second job under an existing client, with its own number", async () => {

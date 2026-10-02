@@ -15,7 +15,8 @@ import {
 } from "@/lib/job-options";
 import { PIPELINE_LABEL } from "@/lib/pipeline";
 import { MATERIAL_KINDS, MATERIAL_KIND_LABEL } from "@/lib/stock-input";
-import { coloursOf, finishOptions, thicknessOptions, type StoneMaterial } from "@/lib/stone";
+import { type StoneMaterial } from "@/lib/stone";
+import { colourOptions, rangeOptions, sizeOptions } from "@/lib/stone-catalogue";
 import type { JobType } from "@prisma/client";
 
 export type ClientOption = {
@@ -71,9 +72,11 @@ export function NewJobForm({
   const isCompany = existing ? picked?.kind === "COMPANY" : v.clientKind === "COMPANY";
 
   const stoneType = (v.stoneType ?? "") as MaterialKind | "";
-  const colours = coloursOf(materials, stoneType);
-  const thicknesses = thicknessOptions(materials.map((m) => m.thicknessMm));
-  const finishes = finishOptions(materials.map((m) => m.finish));
+  // Each list follows the one before: type → range → colour → what that
+  // colour is made in. Changing one clears everything after it.
+  const ranges = rangeOptions(stoneType, materials);
+  const colours = colourOptions(stoneType, v.stoneRange ?? "", materials);
+  const sizes = sizeOptions(v.materialId ?? "", materials);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -325,8 +328,9 @@ export function NewJobForm({
               id="stoneType"
               className={field}
               value={stoneType}
-              // A colour belongs to one type; changing type clears it.
-              onChange={(e) => set({ stoneType: e.target.value, materialId: "", thicknessMm: "", finish: "" })}
+              onChange={(e) =>
+                set({ stoneType: e.target.value, stoneRange: "", materialId: "", thicknessMm: "", finish: "" })
+              }
             >
               <option value="">Not chosen yet</option>
               {MATERIAL_KINDS.map((k) => (
@@ -336,26 +340,38 @@ export function NewJobForm({
               ))}
             </select>
           </Field>
+          <Field id="stoneRange" label="Brand or stone">
+            <select
+              id="stoneRange"
+              className={field}
+              disabled={!stoneType}
+              value={v.stoneRange ?? ""}
+              onChange={(e) => set({ stoneRange: e.target.value, materialId: "", thicknessMm: "", finish: "" })}
+            >
+              <option value="">{stoneType ? "Pick one…" : "Pick the type first"}</option>
+              {ranges.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field id="materialId" label="Colour">
             <select
               id="materialId"
               className={field}
-              disabled={!stoneType}
+              disabled={!v.stoneRange}
               value={v.materialId ?? ""}
               onChange={(e) => {
-                const m = materials.find((x) => x.id === e.target.value);
-                // Start from the colour's own thickness and finish; either can be changed.
-                set({
-                  materialId: e.target.value,
-                  thicknessMm: m ? String(m.thicknessMm) : "",
-                  finish: m ? m.finish : "",
-                });
+                // Start from what the colour is made in; either can be changed.
+                const next = sizeOptions(e.target.value, materials);
+                set({ materialId: e.target.value, thicknessMm: next.thicknessMm, finish: next.finish });
               }}
             >
-              <option value="">{stoneType ? "Pick one…" : "Pick the type first"}</option>
-              {colours.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
+              <option value="">{v.stoneRange ? "Pick one…" : "Pick the brand first"}</option>
+              {colours.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
                 </option>
               ))}
             </select>
@@ -368,8 +384,8 @@ export function NewJobForm({
               value={v.thicknessMm ?? ""}
               onChange={(e) => set({ thicknessMm: e.target.value })}
             >
-              <option value="">Pick one…</option>
-              {thicknesses.map((t) => (
+              <option value="">{v.materialId ? "Pick one…" : "Pick the colour first"}</option>
+              {sizes.thicknesses.map((t) => (
                 <option key={t} value={t}>
                   {t} mm
                 </option>
@@ -384,8 +400,8 @@ export function NewJobForm({
               value={v.finish ?? ""}
               onChange={(e) => set({ finish: e.target.value })}
             >
-              <option value="">Pick one…</option>
-              {finishes.map((f) => (
+              <option value="">{v.materialId ? "Pick one…" : "Pick the colour first"}</option>
+              {sizes.finishes.map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>
@@ -404,9 +420,15 @@ export function NewJobForm({
             />
           </Field>
         </div>
-        {materials.length === 0 ? (
-          <p className="text-sm text-ink-2">No stone on file yet. Colours are added through Add stock.</p>
+        {stoneType === "ENGINEERED" ? (
+          <p className="text-sm text-ink-2">
+            Engineered stone over 1% crystalline silica has been banned in Australia since July 2024. Only
+            silica-free ranges are listed.
+          </p>
         ) : null}
+        <p className="text-sm text-ink-2">
+          Thicknesses and finishes are what each colour is made in. A colour not listed is added through Add stock.
+        </p>
       </Section>
 
       {error ? (

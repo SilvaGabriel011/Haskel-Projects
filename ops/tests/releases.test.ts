@@ -39,10 +39,13 @@ describe("the release list", () => {
   });
 
   it("tells an employee only what applies to them", () => {
-    const forEmployee = itemsFor(CURRENT, "EMPLOYEE");
-    assert.ok(forEmployee.length > 0);
-    assert.ok(forEmployee.every((i) => !i.roles || i.roles.includes("EMPLOYEE")));
-    assert.ok(itemsFor(CURRENT, "ADMIN").length > forEmployee.length);
+    for (const r of RELEASES) {
+      const forEmployee = itemsFor(r, "EMPLOYEE");
+      assert.ok(forEmployee.every((i) => !i.roles || i.roles.includes("EMPLOYEE")), r.version);
+    }
+    // And the filter does filter: some release says more to the office.
+    assert.ok(RELEASES.some((r) => itemsFor(r, "ADMIN").length > itemsFor(r, "EMPLOYEE").length));
+    assert.ok(RELEASES.some((r) => itemsFor(r, "EMPLOYEE").length > 0));
   });
 });
 
@@ -60,6 +63,13 @@ describe("What's new on the dashboard", () => {
   it("shows only the latest release to someone who has never seen one, not the whole history", () => {
     const news = whatsNewFor({ onboardedAt: onboarded, seenVersion: null }, "ADMIN");
     assert.deepEqual(news?.map((n) => n.release.version), [CURRENT.version]);
+  });
+
+  it("shows someone who has never seen one the latest release that has anything for them", () => {
+    const news = whatsNewFor({ onboardedAt: onboarded, seenVersion: null }, "EMPLOYEE");
+    const expected = RELEASES.find((r) => itemsFor(r, "EMPLOYEE").length > 0)!;
+    assert.deepEqual(news?.map((n) => n.release.version), [expected.version]);
+    assert.ok(news![0].items.length > 0);
   });
 
   it("shows everything since the version they last saw, newest first", () => {

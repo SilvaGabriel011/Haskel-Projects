@@ -19,6 +19,7 @@ import { zonedParts } from "@/lib/business-time";
 import { db } from "@/lib/db";
 import { CUSTOMER_SOURCES, JOB_TYPES, defaultPipeline } from "@/lib/job-options";
 import { describeStone } from "@/lib/stone";
+import { fromCatalogueKey, isCatalogueKey, onFileFor } from "@/lib/stone-catalogue";
 import { normaliseSuburb } from "@/lib/suburbs";
 
 const MAX = { name: 80, phone: 30, email: 120, address: 160, suburb: 60, notes: 1000, finish: 40 };
@@ -41,6 +42,10 @@ export type NewJobInput = {
   address: string;
   suburb: string;
   notes: string | null;
+  /**
+   * The stone, by a material on file or a colour from the catalogue
+   * (lib/stone-catalogue.ts) not yet on file, which is "cat:range:colour".
+   */
   stone: { materialId: string; thicknessMm: number; finish: string; sqm: number } | null;
 };
 
@@ -157,6 +162,19 @@ export function validateNewJob(f: Record<string, unknown>): Validated {
     const finish = str(f.finish);
     if (!finish || finish.length > MAX.finish) return { ok: false, reason: "Pick the finish." };
 
+    // A catalogue colour is only made in some thicknesses and finishes; the
+    // form offers only those, and this holds to it.
+    if (isCatalogueKey(materialId)) {
+      const pick = fromCatalogueKey(materialId);
+      if (!pick) return { ok: false, reason: "That colour is not on the list. Pick it again." };
+      if (!pick.thicknesses.includes(thicknessMm)) {
+        return { ok: false, reason: `${pick.fullName} is not made ${thicknessMm} mm thick.` };
+      }
+      if (!pick.finishes.includes(finish)) {
+        return { ok: false, reason: `${pick.fullName} does not come in a ${finish.toLowerCase()} finish.` };
+      }
+    }
+
     // "2,4" is how half the world writes 2.4. Anything else that is not a
     // plain decimal ("1e2", "0x10") is a typo, not a number to guess at.
     const rawSqm = str(f.sqm).replace(",", ".");
@@ -219,6 +237,29 @@ export async function customerWithPhone(tx: Tx, phone: string): Promise<{ id: st
     ORDER BY "createdAt" ASC`;
   const same = nearby.find((x) => phoneKey(x.phone) === key);
   return same ? { id: same.id, name: same.name } : null;
+}
+
+/**
+ * The stone a job names. A material on file is linked. A catalogue colour is
+ * linked to the material on file of that colour if there is one by now, and
+ * otherwise named on the job with no material: nothing is on the rack yet, and
+ * a material made here would have no cost, which would read as free stone in
+ * Financials. It is linked once the stone arrives through Add stock.
+ */
+async function stoneFor(tx: Tx, value: string): Promise<{ name: string; materialId: string | null }> {
+  if (isCatalogueKey(value)) {
+    const pick = fromCatalogueKey(value);
+    if (!pick) throw new Refused("That colour is not on the list. Pick it again.");
+    const sameType = await tx.material.findMany({
+      where: { kind: pick.range.kind },
+      select: { id: true, name: true, kind: true },
+    });
+    const m = onFileFor(pick, sameType);
+    return m ? { name: m.name, materialId: m.id } : { name: pick.fullName, materialId: null };
+  }
+  const material = await tx.material.findUnique({ where: { id: value }, select: { id: true, name: true } });
+  if (!material) throw new Refused("That stone is no longer on file.");
+  return { name: material.name, materialId: material.id };
 }
 
 export type CreateResult = { ok: true; orderId: string; jobNumber: string } | { ok: false; reason: string };
@@ -284,16 +325,12 @@ export async function createJob(input: NewJobInput, userId: string, now = new Da
         });
 
         if (input.stone) {
-          const material = await tx.material.findUnique({
-            where: { id: input.stone.materialId },
-            select: { name: true },
-          });
-          if (!material) throw new Refused("That stone is no longer on file.");
+          const { name, materialId } = await stoneFor(tx, input.stone.materialId);
           await tx.orderLine.create({
             data: {
               orderId: order.id,
-              description: describeStone(material, input.stone.thicknessMm, input.stone.finish),
-              materialId: input.stone.materialId,
+              description: describeStone({ name }, input.stone.thicknessMm, input.stone.finish),
+              materialId,
               sqm: input.stone.sqm,
             },
           });
