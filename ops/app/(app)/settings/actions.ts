@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { workspaceDomain } from "@/lib/access-config";
 import { record } from "@/lib/activity";
 import { db } from "@/lib/db";
+import { sendTestEvent } from "@/lib/google-calendar";
 import { requireAdmin } from "@/lib/guard";
 import { validatePerson } from "@/lib/people";
 import { hashPin, validPin } from "@/lib/pin";
@@ -109,4 +110,12 @@ export async function setPin(userId: string, pin: string) {
   await record(me, "person.pin", `Set a new PIN for ${who.name} (${who.email})`, "/settings");
   revalidatePath("/settings");
   return { ok: true as const };
+}
+
+/** "Send a test event": the whole round trip to Google, from Settings. */
+export async function testCalendar() {
+  const me = await requireAdmin();
+  const res = await sendTestEvent();
+  await record(me, "calendar.test", res.ok ? "Sent a test event to Google Calendar: it worked" : `Calendar test failed: ${res.detail}`, "/settings");
+  return res;
 }

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 
 import { AddPerson } from "@/components/add-person";
+import { CalendarTest } from "@/components/calendar-test";
 import { PageHead } from "@/components/page-head";
 import { StaffRow } from "@/components/staff-row";
 import { Card, Pill, SectionTitle } from "@/components/ui";
 import { demoModeEnabled, workspaceDomain } from "@/lib/access-config";
 import { requireAdmin } from "@/lib/guard";
 import { recentActivity } from "@/lib/activity";
+import { calendarId, calendarMissing, serviceAccount } from "@/lib/google-calendar";
 import { formatDate } from "@/lib/business-time";
 import { CURRENT, RELEASES, releaseDate } from "@/lib/releases";
 import { db } from "@/lib/db";
@@ -144,14 +146,27 @@ export default async function SettingsPage() {
             {demo ? <Pill tone="warn">on</Pill> : <Pill tone="good">off</Pill>}
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-            <div>
+          <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
+            <div className="min-w-0">
               <div className="text-sm font-semibold">Google Calendar sync</div>
               <div className="text-xs text-ink-2">
-                Not connected. Bookings live here only; nothing is written to a calendar yet.
+                {calendarMissing().length === 0 ? (
+                  <>
+                    Set up. Accepted bookings are written to{" "}
+                    <span className="font-semibold text-ink">{calendarId()}</span> by{" "}
+                    <span className="font-semibold text-ink">{serviceAccount()?.clientEmail}</span>. Send a test
+                    event to check the calendar is shared with it.
+                  </>
+                ) : (
+                  <>
+                    Not connected: {calendarMissing().join(", ")} {calendarMissing().length === 1 ? "is" : "are"} not
+                    set. Bookings live here only until it is.
+                  </>
+                )}
               </div>
+              {calendarMissing().length === 0 ? <CalendarTest /> : null}
             </div>
-            <Pill>pending</Pill>
+            {calendarMissing().length === 0 ? <Pill tone="good">set up</Pill> : <Pill tone="warn">not connected</Pill>}
           </div>
         </Card>
         <p className="mt-3 max-w-2xl text-xs text-muted">
