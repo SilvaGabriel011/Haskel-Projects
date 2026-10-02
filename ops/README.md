@@ -273,7 +273,7 @@ widen what an employee sees.
 account must be on the company Workspace domain, and the email must be on the
 staff list in `lib/staff.ts`. A valid Google account alone is not enough.
 
-**Demo mode** adds password sign-in for the three seeded accounts so the system
+**Demo mode** adds password sign-in for the seeded logins so the system
 can be explored before Google is set up. It ships **off**; only the exact string
 `DEMO_MODE=true` enables it. Anything else — including absent, `"1"` and
 `"TRUE"` — removes the provider entirely, so there is no password path left to
@@ -286,6 +286,25 @@ passwords are never written to disk.
 > The hash format uses `:` separators, not `$`. A `$` inside a `.env` value is
 > read as a variable reference and silently expanded away — locally and in
 > Vercel's environment variables alike.
+
+### Shared logins (info@ and the like)
+
+Several people can sign in with one email. Each is their own person in
+Settings, with their own role. Google proves the login; after signing in, each
+person picks their name and types their own **4-digit PIN** (`/who`), and is
+themselves until they sign out or press **Switch person**. Five wrong PINs in a
+row lock that person for 15 minutes. The pick reaches the session as a ticket
+signed with `AUTH_SECRET` (`lib/pin.ts`), so it cannot be faked from the
+browser.
+
+Every action is recorded with two labels (`lib/activity.ts`, shown under
+Settings → Activity): the **owner**, the login that was signed in, and the
+**user**, the person on it who did it. On someone's own login they are the same.
+
+Adding a second person to a login makes it shared, so they need a PIN; anyone
+already on it needs one too, and Settings flags them until they have it. The
+seed has `info@haskelproject.com.au` shared by Mia (admin, PIN 2580) and Tom
+(employee, PIN 1470); in demo mode it needs `DEMO_INFO_PASSWORD_HASH`.
 
 ## Before this goes live — read this
 

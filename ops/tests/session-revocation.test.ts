@@ -32,6 +32,13 @@ describe("re-reading the session", () => {
     assert.equal(await revalidateToken(token, async () => staff({ active: false })), null);
   });
 
+  it("ends the session of someone moved off the login they were picked on", async () => {
+    const shared = { ...token, owner: "info@haskelproject.com.au", email: "info@haskelproject.com.au" };
+    assert.equal(await revalidateToken(shared, async () => staff({ email: "sam@haskelproject.com.au" })), null);
+    const still = await revalidateToken(shared, async () => staff({ email: "info@haskelproject.com.au" }));
+    assert.equal(still?.owner, "info@haskelproject.com.au");
+  });
+
   it("ends the session of someone deleted", async () => {
     assert.equal(await revalidateToken(token, async () => null), null);
   });

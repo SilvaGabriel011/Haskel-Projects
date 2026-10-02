@@ -1,9 +1,11 @@
 import Link from "next/link";
 
 import { signOut } from "@/auth";
+import { switchPerson } from "@/app/who/actions";
 import { DemoBanner } from "@/components/demo-banner";
 import { MobileMenu } from "@/components/mobile-menu";
 import { Sidebar } from "@/components/sidebar";
+import { db } from "@/lib/db";
 import { requireUser } from "@/lib/guard";
 import { sectionsFor } from "@/lib/roles";
 
@@ -11,6 +13,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await requireUser();
   const sections = sectionsFor(user.role);
   const isAdmin = user.role === "ADMIN";
+  // Someone else on the same login can take over without a Google sign-out.
+  const shared = (await db.user.count({ where: { email: user.owner, active: true } })) > 1;
 
   return (
     <>
@@ -38,7 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
           <div className="mt-7 border-t border-line pt-5">
             <div className="text-sm font-semibold">{user.name}</div>
-            <div className="text-xs text-ink-2">{user.email}</div>
+            <div className="text-xs text-ink-2">{shared ? `on ${user.owner}` : user.email}</div>
             <span
               className={[
                 "mt-2 inline-block rounded-full px-3 py-1 text-[0.6rem] font-bold uppercase tracking-[0.14em]",
@@ -54,6 +58,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             >
               Getting started
             </Link>
+
+            {shared ? (
+              <form className="mt-3" action={switchPerson}>
+                <button
+                  type="submit"
+                  className="text-xs font-semibold text-ink-2 underline underline-offset-4 hover:text-rose"
+                >
+                  Switch person
+                </button>
+              </form>
+            ) : null}
 
             <form
               className="mt-3"

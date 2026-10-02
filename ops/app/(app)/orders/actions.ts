@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 
+import { record } from "@/lib/activity";
+import { db } from "@/lib/db";
 import { requireAdmin, requireUser } from "@/lib/guard";
+import { STAGE_LABEL } from "@/lib/pipeline";
 import { createJob, validateNewJob } from "@/lib/new-job";
 import { moveOrder } from "@/lib/order-move";
 import { releaseStock, reserveStock, type StockKind } from "@/lib/reservations";
@@ -25,6 +28,7 @@ export async function advanceOrder(orderId: string, to: OrderStatus) {
 
   const res = await moveOrder({ orderId, to, userId: user.id, role: user.role });
   if (!res.ok) return res;
+  await record(user, "job.moved", `Moved ${await jobNumber(orderId)} to ${STAGE_LABEL[to]}`, `/orders/${orderId}`);
 
   revalidatePath("/orders");
   revalidatePath("/board");
@@ -47,15 +51,34 @@ export async function advanceOrder(orderId: string, to: OrderStatus) {
 export async function reserveForOrder(orderId: string, kind: StockKind, itemId: string) {
   const user = await requireUser();
   const res = await reserveStock({ kind, itemId, orderId, userId: user.id });
-  if (res.ok) revalidateStock(orderId);
+  if (res.ok) {
+    await record(user, "stock.reserved", `Held ${await stockRef(kind, itemId)} for ${await jobNumber(orderId)}`, `/orders/${orderId}`);
+    revalidateStock(orderId);
+  }
   return res;
 }
 
 export async function releaseFromOrder(orderId: string, kind: StockKind, itemId: string) {
   const user = await requireUser();
   const res = await releaseStock({ kind, itemId, orderId, userId: user.id });
-  if (res.ok) revalidateStock(orderId);
+  if (res.ok) {
+    await record(user, "stock.released", `Gave back ${await stockRef(kind, itemId)} from ${await jobNumber(orderId)}`, `/orders/${orderId}`);
+    revalidateStock(orderId);
+  }
   return res;
+}
+
+/** How a job reads in the activity record. */
+async function jobNumber(orderId: string) {
+  return (await db.order.findUnique({ where: { id: orderId }, select: { jobNumber: true } }))?.jobNumber ?? "a job";
+}
+
+async function stockRef(kind: StockKind, id: string) {
+  const row =
+    kind === "slab"
+      ? await db.slab.findUnique({ where: { id }, select: { ref: true } })
+      : await db.offcut.findUnique({ where: { id }, select: { ref: true } });
+  return row?.ref ?? kind;
 }
 
 function revalidateStock(orderId: string) {
@@ -79,6 +102,7 @@ export async function openJob(form: Record<string, unknown>) {
 
   const res = await createJob(parsed.value, me.id);
   if (!res.ok) return res;
+  await record(me, "job.opened", `Opened ${res.jobNumber}`, `/orders/${res.orderId}`);
 
   revalidatePath("/orders");
   revalidatePath("/board");

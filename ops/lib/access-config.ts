@@ -77,12 +77,15 @@ export type StaffRecord = { id: string; email: string; name: string; role: "ADMI
  *
  * `lookup` is passed in so this stays free of the database and testable.
  */
-export async function revalidateToken<T extends { sub?: string | null; role?: unknown; name?: string | null; email?: string | null }>(
-  token: T,
-  lookup: (id: string) => Promise<StaffRecord | null>,
-): Promise<T | null> {
+export async function revalidateToken<
+  T extends { sub?: string | null; role?: unknown; name?: string | null; email?: string | null; owner?: string | null },
+>(token: T, lookup: (id: string) => Promise<StaffRecord | null>): Promise<T | null> {
   if (!token.sub) return null;
   const staff = await lookup(token.sub);
   if (!staff || !staff.active) return null;
-  return { ...token, role: staff.role, name: staff.name, email: staff.email };
+  // The person must still belong to the login they were picked under: moving
+  // someone to another email ends the session they had on the old one.
+  const owner = token.owner ?? token.email;
+  if (owner && staff.email.toLowerCase() !== owner.toLowerCase()) return null;
+  return { ...token, role: staff.role, name: staff.name, email: staff.email, owner: staff.email.toLowerCase() };
 }

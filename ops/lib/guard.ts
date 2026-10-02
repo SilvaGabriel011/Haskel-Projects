@@ -16,6 +16,8 @@ export type SignedInUser = {
   email: string;
   name: string;
   role: Role;
+  /** The login they signed in with: the "owner" on what they do. */
+  owner: string;
 };
 
 /**
@@ -36,12 +38,16 @@ export async function requireUser(): Promise<SignedInUser> {
   if (!user?.email || !isRole(user.role)) {
     redirect("/login");
   }
+  // On a shared login and not yet picked: they are no one in particular, and
+  // the session's default role must not be mistaken for theirs.
+  if (user.pending) redirect("/who");
 
   return {
     id: user.id ?? user.email,
     email: user.email,
     name: user.name ?? user.email,
     role: user.role,
+    owner: user.owner || user.email,
   };
 }
 

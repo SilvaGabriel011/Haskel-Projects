@@ -20,15 +20,19 @@ export type Staff = {
   active: boolean;
 };
 
-/** Look someone up by email. Inactive people are treated as absent. */
-export async function findStaffByEmail(email: string | null | undefined): Promise<Staff | null> {
-  if (!email) return null;
-  const user = await db.user.findUnique({
-    where: { email: email.trim().toLowerCase() },
+/**
+ * The people who sign in with this email, active ones only, by name.
+ *
+ * Usually one. A shared login (info@…) has one per person, and they pick
+ * themselves with a PIN after signing in (lib/pin.ts).
+ */
+export async function findPeopleByLogin(email: string | null | undefined): Promise<Staff[]> {
+  if (!email) return [];
+  return db.user.findMany({
+    where: { email: email.trim().toLowerCase(), active: true },
     select: { id: true, email: true, name: true, role: true, active: true },
+    orderBy: { name: "asc" },
   });
-  if (!user || !user.active) return null;
-  return user;
 }
 
 /** Look someone up by id, active or not — the caller decides what inactive means. */

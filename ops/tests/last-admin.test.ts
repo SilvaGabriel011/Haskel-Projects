@@ -6,11 +6,24 @@
  * action uses rather than the action itself (which needs a session).
  */
 import assert from "node:assert/strict";
-import { after, describe, it } from "node:test";
+import { after, before, describe, it } from "node:test";
 
 import { db } from "../lib/db";
 
-after(async () => { await db.$disconnect(); });
+// The risky configuration is one admin. The seed has more (the shared login
+// has one), so the others are switched off for these tests and put back after.
+let parked: string[] = [];
+before(async () => {
+  const first = await db.user.findFirstOrThrow({ where: { role: "ADMIN", active: true }, orderBy: { createdAt: "asc" } });
+  const others = await db.user.findMany({ where: { role: "ADMIN", active: true, id: { not: first.id } }, select: { id: true } });
+  parked = others.map((o) => o.id);
+  await db.user.updateMany({ where: { id: { in: parked } }, data: { active: false } });
+});
+
+after(async () => {
+  await db.user.updateMany({ where: { id: { in: parked } }, data: { active: true } });
+  await db.$disconnect();
+});
 
 /** Mirrors wouldLeaveNoAdmin in app/(app)/settings/actions.ts */
 async function otherActiveAdmins(userId: string) {
@@ -18,9 +31,9 @@ async function otherActiveAdmins(userId: string) {
 }
 
 describe("the last admin", () => {
-  it("the seed leaves exactly one admin, which is the case worth guarding", async () => {
+  it("starts from exactly one admin, which is the case worth guarding", async () => {
     const admins = await db.user.count({ where: { role: "ADMIN", active: true } });
-    assert.equal(admins, 1, "seed should have one admin — the risky configuration");
+    assert.equal(admins, 1, "one admin: the risky configuration");
   });
 
   it("demoting the only admin would leave none, so it must be refused", async () => {

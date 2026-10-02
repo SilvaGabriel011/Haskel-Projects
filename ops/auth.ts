@@ -13,12 +13,14 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 import authConfig from "./auth.config";
+import { record } from "@/lib/activity";
 import { verifyPassword } from "@/lib/password";
+import { readPickTicket } from "@/lib/pin";
 import {
   demoModeEnabled,
   demoPasswordEnvFor,
   emailOnDomain,
-  findStaffByEmail,
+  findPeopleByLogin,
   findStaffById,
   googleSignInBlockedReason,
   revalidateToken,
@@ -39,20 +41,22 @@ const demoProvider = Credentials({
     const password = typeof credentials?.password === "string" ? credentials.password : "";
     if (!email || !password) return null;
 
-    const staff = await findStaffByEmail(email);
-    if (!staff) return null;
+    // The password belongs to the login; on a shared one, who is at the
+    // keyboard is asked next, with a PIN.
+    const [first] = await findPeopleByLogin(email);
+    if (!first) return null;
 
-    const envName = demoPasswordEnvFor(staff.email);
+    const envName = demoPasswordEnvFor(first.email);
     const stored = envName ? process.env[envName] : undefined;
     if (!stored) return null;
 
     if (!verifyPassword(password, stored)) return null;
 
-    return { id: staff.id, email: staff.email, name: staff.name };
+    return { id: first.id, email: first.email, name: first.name };
   },
 });
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
   providers: demoModeEnabled()
     ? [...authConfig.providers, demoProvider]
@@ -78,29 +82,61 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const domain = workspaceDomain();
       if (domain && !emailOnDomain(email, domain)) return false;
 
-      return (await findStaffByEmail(email)) !== null;
+      return (await findPeopleByLogin(email)).length > 0;
     },
 
     /**
-     * At sign-in, stamp the staff id onto the token. On every later request,
+     * At sign-in, stamp the person onto the token. On every later request,
      * re-read that person: a deactivated account gets no session, and a role
      * change applies on their next page rather than when the token expires.
+     *
+     * A shared login (several people on one email) signs in as no one yet:
+     * the token is "pending" and every page sends them to /who to pick
+     * themselves with their PIN. The pick arrives as a signed ticket
+     * (lib/pin.ts), never as a bare person id, since the browser can post
+     * session updates too.
      *
      * Runs on Node only. The edge proxy reads the token as it was last
      * written, so it can lag one request behind; every page and server action
      * goes through auth() here, and that is where access is decided.
      */
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user?.email) {
-        const staff = await findStaffByEmail(user.email);
+        const owner = user.email.toLowerCase();
+        const people = await findPeopleByLogin(owner);
         // signIn already refused anyone not on the staff list; this closes the
         // gap if they were removed in between rather than minting a token
         // with no role.
-        if (!staff) return null;
-        token.sub = staff.id;
-        token.role = staff.role;
-        token.name = staff.name;
-        return token;
+        if (!people.length) return null;
+        token.owner = owner;
+        token.email = owner;
+        if (people.length > 1) {
+          return { ...token, sub: undefined, role: undefined, name: undefined, pending: true };
+        }
+        const [person] = people;
+        await record({ id: person.id, name: person.name, owner }, "signed.in", "Signed in");
+        return { ...token, sub: person.id, role: person.role, name: person.name, pending: false };
+      }
+
+      const owner = String(token.owner ?? token.email ?? "");
+
+      if (trigger === "update" && session && typeof session === "object") {
+        // "Switch person" on a shared login: back to picking.
+        if ("switchPerson" in session && (await findPeopleByLogin(owner)).length > 1) {
+          return { ...token, sub: undefined, role: undefined, name: undefined, pending: true };
+        }
+        const personId = "pickTicket" in session ? readPickTicket(session.pickTicket, owner) : null;
+        if (personId) {
+          const picked = (await findPeopleByLogin(owner)).find((p) => p.id === personId);
+          if (picked) {
+            return { ...token, sub: picked.id, role: picked.role, name: picked.name, owner, pending: false };
+          }
+        }
+      }
+
+      if (token.pending) {
+        // Still the login's to pick from; gone if no one is left on it.
+        return (await findPeopleByLogin(owner)).length ? token : null;
       }
       return revalidateToken(token, findStaffById);
     },
