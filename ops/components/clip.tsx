@@ -26,8 +26,14 @@ export function Clip({ src, label }: { src: string; label: string }) {
     }
     const seen = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) video.play().catch(() => setStill(true));
-        else video.pause();
+        if (entry.isIntersecting) {
+          // Refused autoplay (a data saver, say) gets the play button. Scrolling
+          // straight past cancels the play with an AbortError, which is not a
+          // refusal: it plays again next time it comes into view.
+          video.play().catch((e: unknown) => {
+            if (e instanceof DOMException && e.name === "NotAllowedError") setStill(true);
+          });
+        } else video.pause();
       },
       { threshold: 0.4 },
     );

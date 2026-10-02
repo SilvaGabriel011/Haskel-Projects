@@ -27,6 +27,7 @@ export type MaterialOption = {
 export type SlabOption = {
   id: string;
   ref: string;
+  materialId: string;
   materialName: string;
 };
 
@@ -99,6 +100,8 @@ export function AddStock({
   const finishes = finishOptions(materials.map((m) => m.finish));
   const suppliers = supplierOptions(materials.map((m) => m.supplier));
   const newSupplier = values.supplierChoice === NEW_SUPPLIER || suppliers.length === 0;
+  // An offcut comes off a slab of its own colour; a colour new today has none.
+  const parentSlabs = slabs.filter((x) => x.materialId === values.materialId);
 
   const set = (k: string, v: string | boolean) => {
     setValues((prev) => ({ ...prev, [k]: v }));
@@ -397,6 +400,7 @@ export function AddStock({
                               materialChoice: "",
                               materialId: "",
                               materialKind: e.target.value,
+                              parentSlabId: "",
                             }))
                           }
                         >
@@ -421,6 +425,8 @@ export function AddStock({
                               ...prev,
                               materialChoice: choice,
                               materialId: choice === NEW_MATERIAL ? "" : choice,
+                              // The slab it came off is the same stone, so a new colour clears it.
+                              parentSlabId: "",
                               // An offcut starts from its material's own thickness and finish.
                               ...(m && prev.kind === "OFFCUT"
                                 ? { thicknessMm: String(m.thicknessMm), finish: m.finish }
@@ -649,7 +655,7 @@ export function AddStock({
                         </Field>
                       </div>
 
-                      {slabs.length > 0 ? (
+                      {parentSlabs.length > 0 ? (
                         <Field id="parentSlabId" label="Cut from" hint="Optional — links it to the slab it came off.">
                           <select
                             id="parentSlabId"
@@ -658,7 +664,7 @@ export function AddStock({
                             onChange={(e) => set("parentSlabId", e.target.value)}
                           >
                             <option value="">Not from a slab on file</option>
-                            {slabs.map((s) => (
+                            {parentSlabs.map((s) => (
                               <option key={s.id} value={s.id}>
                                 {s.ref} — {s.materialName}
                               </option>

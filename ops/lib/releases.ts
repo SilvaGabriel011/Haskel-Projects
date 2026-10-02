@@ -33,6 +33,26 @@ const EMPLOYEE: readonly Role[] = ["EMPLOYEE"];
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "1.4.1",
+    date: "2026-10-02",
+    title: "Fixes",
+    items: [
+      {
+        text: "Accepting a website booking from a client already on file puts the job under their profile, however they typed their number.",
+        roles: ADMIN,
+        href: "/bookings",
+      },
+      {
+        text: "Jobs from website bookings start on the timeline at Initial, and the follow-up board counts their days from when they were accepted.",
+      },
+      {
+        text: "Add stock spots a colour already on file whatever the capitals, and “Cut from” only lists slabs of the same colour.",
+        roles: ADMIN,
+        href: "/stock",
+      },
+    ],
+  },
+  {
     version: "1.4.0",
     date: "2026-10-01",
     title: "Open jobs by hand",

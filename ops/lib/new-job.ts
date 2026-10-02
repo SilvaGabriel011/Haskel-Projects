@@ -196,6 +196,31 @@ export function nextJobNumber(now: Date, existing: readonly string[]): string {
   return `${prefix}${String(highest + 1).padStart(3, "0")}`;
 }
 
+type Tx = Parameters<Parameters<typeof db.$transaction>[0]>[0];
+
+/**
+ * The client on file with this phone number, however either was typed.
+ *
+ * Matched on the number, not the typing: phones on file are stored as
+ * entered, spaces and all. Narrowed in the database by the last eight
+ * digits, which every format of one number shares, then compared exactly.
+ *
+ * Takes a lock on the number first, held to the end of the transaction: two
+ * people entering the same new client at once would otherwise both find no
+ * match and both create one. The second now waits, then finds the first's.
+ * Used by New job and by accepting a website booking, so both find one client.
+ */
+export async function customerWithPhone(tx: Tx, phone: string): Promise<{ id: string; name: string } | null> {
+  const key = phoneKey(phone);
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"customer-phone:" + key}))`;
+  const nearby = await tx.$queryRaw<Array<{ id: string; name: string; phone: string }>>`
+    SELECT id, name, phone FROM "Customer"
+    WHERE regexp_replace(phone, '\\D', '', 'g') LIKE ${"%" + key.slice(-8)}
+    ORDER BY "createdAt" ASC`;
+  const same = nearby.find((x) => phoneKey(x.phone) === key);
+  return same ? { id: same.id, name: same.name } : null;
+}
+
 export type CreateResult = { ok: true; orderId: string; jobNumber: string } | { ok: false; reason: string };
 
 class Refused extends Error {}
@@ -229,18 +254,7 @@ export async function createJob(input: NewJobInput, userId: string, now = new Da
           const c = input.client.create;
           // One profile per phone number, so a client's jobs stay together
           // instead of splitting across duplicates.
-          // Matched on the number, not the typing: phones on file are stored as
-          // entered, spaces and all. Narrowed in the database by the last eight
-          // digits, which every format of one number shares, then compared exactly.
-          const key = phoneKey(c.phone);
-          // Two people entering the same new client at once would both find
-          // no match. Taking a lock on the number first makes the second wait,
-          // then find the first one's profile.
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"customer-phone:" + key}))`;
-          const nearby = await tx.$queryRaw<Array<{ name: string; phone: string }>>`
-            SELECT name, phone FROM "Customer"
-            WHERE regexp_replace(phone, '\\D', '', 'g') LIKE ${"%" + key.slice(-8)}`;
-          const same = nearby.find((x) => phoneKey(x.phone) === key);
+          const same = await customerWithPhone(tx, c.phone);
           if (same) throw new Refused(`${same.name} already has that phone number. Pick them from the client list.`);
           const made = await tx.customer.create({ data: { ...c, suburb: input.suburb } });
           customerId = made.id;

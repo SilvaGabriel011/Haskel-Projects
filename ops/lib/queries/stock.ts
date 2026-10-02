@@ -220,8 +220,8 @@ export async function listMaterialOptions() {
 export async function listSlabOptions() {
   const slabs = await db.slab.findMany({
     where: { status: { in: ["IN_STOCK", "RESERVED", "CUT"] } },
-    select: { id: true, ref: true, material: { select: { name: true } } },
+    select: { id: true, ref: true, materialId: true, material: { select: { name: true } } },
     orderBy: { ref: "asc" },
   });
-  return slabs.map((s) => ({ id: s.id, ref: s.ref, materialName: s.material.name }));
+  return slabs.map((s) => ({ id: s.id, ref: s.ref, materialId: s.materialId, materialName: s.material.name }));
 }

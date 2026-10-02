@@ -118,6 +118,37 @@ describe("accepting a request", () => {
     assert.equal(res.ok, false);
     assert.match(!res.ok ? res.reason : "", /already accepted/i);
   });
+
+  it("finds the client on file by number, however the website form had it typed", async () => {
+    const local = `04${String(Date.now()).slice(-8)}`;
+    const onFile = await db.customer.create({
+      data: { name: `On file ${TAG}`, phone: `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`, suburb: "Testville", source: "PHONE" },
+    });
+    try {
+      const r = await newRequest({ phone: `+61 ${local.slice(1)}` });
+      const res = await acceptBookingRequest({ id: r.id, userId: adminId, confirmConflicts: true });
+      assert.ok(res.ok);
+      const order = await db.order.findUniqueOrThrow({ where: { id: res.orderId }, select: { customerId: true } });
+      assert.equal(order.customerId, onFile.id, "the job goes under the client already on file, not a duplicate");
+    } finally {
+      await db.bookingRequest.deleteMany({ where: { id: { in: madeRequests }, order: { customerId: onFile.id } } });
+      await db.scheduleEvent.deleteMany({ where: { order: { customerId: onFile.id } } });
+      await db.order.deleteMany({ where: { customerId: onFile.id } });
+      await db.customer.delete({ where: { id: onFile.id } });
+    }
+  });
+
+  it("opens the job's first stage, so its days are counted from the accept", async () => {
+    const r = await newRequest();
+    const now = new Date("2031-02-03T01:00:00Z");
+    const res = await acceptBookingRequest({ id: r.id, userId: adminId, confirmConflicts: true, now });
+    assert.ok(res.ok);
+    const stages = await db.orderStage.findMany({ where: { orderId: res.orderId } });
+    assert.equal(stages.length, 1);
+    assert.equal(stages[0].stage, "INITIAL");
+    assert.equal(stages[0].exitedAt, null, "it is the stage the job is in now");
+    assert.equal(stages[0].enteredAt.getTime(), now.getTime());
+  });
 });
 
 describe("possible duplicates", () => {
