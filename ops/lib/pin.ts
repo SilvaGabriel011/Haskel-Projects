@@ -38,7 +38,7 @@ export type PinCheck = { ok: true } | { ok: false; reason: string; wrong: boolea
  */
 export function checkPin(person: PinState, pin: string, now = new Date()): PinCheck {
   if (!person.pinHash) {
-    return { ok: false, wrong: false, reason: `${person.name} has no PIN yet. Ask an admin to set one in Settings.` };
+    return { ok: false, wrong: false, reason: `${person.name} has no PIN yet. Email a code to set one, or ask an admin to set it in Settings.` };
   }
   if (person.pinLockedUntil && person.pinLockedUntil > now) {
     const mins = Math.ceil((person.pinLockedUntil.getTime() - now.getTime()) / 60_000);

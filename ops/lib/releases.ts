@@ -33,6 +33,21 @@ const EMPLOYEE: readonly Role[] = ["EMPLOYEE"];
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "1.8.0",
+    date: "2026-10-04",
+    title: "Forgot PIN",
+    items: [
+      {
+        text: "Forgot your PIN on a shared login? Pick your name, press “Forgot PIN?”, and a one-time code is emailed to the login’s inbox. Type it with a new PIN and carry on.",
+      },
+      {
+        text: "Settings shows whether email is set up for these codes.",
+        roles: ADMIN,
+        href: "/settings",
+      },
+    ],
+  },
+  {
     version: "1.7.0",
     date: "2026-10-02",
     title: "Google Calendar",

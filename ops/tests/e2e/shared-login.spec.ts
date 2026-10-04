@@ -61,6 +61,14 @@ test("each person on a shared login picks themselves with a PIN, and gets their 
   await expect(miaRow.first()).toBeVisible();
 });
 
+test("Forgot PIN? says what to do when email is not set up", async ({ page }) => {
+  await signInShared(page);
+  await page.getByRole("radio", { name: /Tom Nguyen/ }).click();
+  await page.getByRole("button", { name: "Forgot PIN?" }).click();
+  // CI has no email provider: the person is told plainly, and no code is pending.
+  await expect(page.getByRole("alert").filter({ hasText: "Email is not set up" })).toBeVisible();
+});
+
 test("the login page lists a shared login once", async ({ page }) => {
   await page.goto("/login");
   await expect(page.locator(`#demo-email option[value="${INFO}"]`)).toHaveCount(1);

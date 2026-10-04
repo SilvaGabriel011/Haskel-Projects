@@ -48,6 +48,12 @@ model User {
   /// Wrong PINs in a row; five locks picking them for 15 minutes.
   pinFailures    Int       @default(0)
   pinLockedUntil DateTime?
+  /// "Forgot PIN?": a one-time code emailed to the login (lib/pin-reset.ts),
+  /// stored hashed, good for 10 minutes and 5 tries.
+  pinResetHash    String?
+  pinResetExpires DateTime?
+  pinResetTries   Int       @default(0)
+  pinResetSentAt  DateTime?
 
   movements  StockMovement[]
   shifts     ScheduleAssignee[]

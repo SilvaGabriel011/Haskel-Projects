@@ -301,6 +301,16 @@ Every action is recorded with two labels (`lib/activity.ts`, shown under
 Settings → Activity): the **owner**, the login that was signed in, and the
 **user**, the person on it who did it. On someone's own login they are the same.
 
+**Forgot PIN?** On the picker, after choosing their name, a person can have a
+6-digit one-time code emailed to the shared login itself (info@…): whoever reads
+that inbox already controls the login. The code lasts 10 minutes and 5 tries,
+one can be sent a minute, and it sets a new PIN and lifts any lock
+(`lib/pin-reset.ts`). The same link sets a first PIN for someone without one.
+Email goes through [Resend](https://resend.com): verify `haskelproject.com.au`
+there, then set `RESEND_API_KEY` and `MAIL_FROM` (e.g.
+`Haskel Ops <noreply@haskelproject.com.au>`) in Vercel. Until then, an admin
+sets PINs in Settings. Google sign-in passwords are Google's, reset at Google.
+
 Adding a second person to a login makes it shared, so they need a PIN; anyone
 already on it needs one too, and Settings flags them until they have it. The
 seed has `info@haskelproject.com.au` shared by Mia (admin, PIN 2580) and Tom
