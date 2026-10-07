@@ -84,6 +84,11 @@ describe("the New job form", () => {
       [{ ...person, materialId: "cat:dekton:Lunar", thicknessMm: "40", finish: "Matte" }, /not made 40 mm/],
       [{ ...person, materialId: "cat:dekton:Lunar", thicknessMm: "20", finish: "Polished" }, /polished finish/],
       [{ ...person, materialId: "cat:dekton:Nobody", thicknessMm: "20", finish: "Matte" }, /not on the list/],
+      // A stone typed in still needs a name, a thickness and a finish.
+      [{ ...person, materialId: "new: ", thicknessMm: "20", finish: "Honed" }, /stone's name/],
+      [{ ...person, materialId: `new:${"x".repeat(81)}`, thicknessMm: "20", finish: "Honed" }, /stone's name/],
+      [{ ...person, materialId: "new:Blue Bahia", thicknessMm: "", finish: "Honed" }, /thickness/],
+      [{ ...person, materialId: "new:Blue Bahia", thicknessMm: "20", finish: "" }, /finish/],
     ];
     for (const [form, why] of cases) {
       const r = validateNewJob(form);
@@ -223,6 +228,28 @@ describe("opening the job", () => {
     const [line] = await db.orderLine.findMany({ where: { orderId: r.orderId } });
     assert.equal(line.description, "Neolith Arctic White · 12 mm · Silk");
     assert.equal(line.materialId, null, "no material made up with no cost, which would read as free stone");
+  });
+
+  it("names a stone typed in on the job, in any thickness and finish, with no material", async () => {
+    const r = await open({
+      ...person, clientName: `${TAG} Typed`, phone: phone(7),
+      materialId: "new:  Blue   Bahia ", thicknessMm: "25", finish: "Brushed",
+    });
+    assert.ok(r.ok, r.ok ? "" : r.reason);
+    const [line] = await db.orderLine.findMany({ where: { orderId: r.orderId } });
+    assert.equal(line.description, "Blue Bahia · 25 mm · Brushed");
+    assert.equal(line.materialId, null);
+  });
+
+  it("links a stone typed in to the material on file of that name, whatever its case", async () => {
+    const r = await open({
+      ...person, clientName: `${TAG} Typed on file`, phone: phone(8),
+      materialId: `new:${material.name.toUpperCase()}`, thicknessMm: "20", finish: "Polished",
+    });
+    assert.ok(r.ok, r.ok ? "" : r.reason);
+    const [line] = await db.orderLine.findMany({ where: { orderId: r.orderId } });
+    assert.equal(line.materialId, material.id);
+    assert.equal(line.description, `${material.name} · 20 mm · Polished`);
   });
 
   it("links a catalogue colour to the material on file of that colour", async () => {

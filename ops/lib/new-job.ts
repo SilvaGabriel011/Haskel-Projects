@@ -15,10 +15,11 @@
  */
 import { Prisma, type CustomerKind, type CustomerSource, type JobType, type Pipeline } from "@prisma/client";
 
-import { zonedParts } from "@/lib/business-time";
+import { isoDay, zonedParts, zonedTime } from "@/lib/business-time";
 import { db } from "@/lib/db";
 import { CUSTOMER_SOURCES, JOB_TYPES, defaultPipeline } from "@/lib/job-options";
-import { describeStone } from "@/lib/stone";
+import { readNoticeChoices, type NoticeChoices } from "@/lib/job-notices";
+import { describeStone, isNewStoneKey, newStoneName } from "@/lib/stone";
 import { fromCatalogueKey, isCatalogueKey, onFileFor } from "@/lib/stone-catalogue";
 import { normaliseSuburb } from "@/lib/suburbs";
 
@@ -44,9 +45,12 @@ export type NewJobInput = {
   notes: string | null;
   /**
    * The stone, by a material on file or a colour from the catalogue
-   * (lib/stone-catalogue.ts) not yet on file, which is "cat:range:colour".
+   * (lib/stone-catalogue.ts) not yet on file, which is "cat:range:colour",
+   * or one typed in that is on no list, which is "new:name".
    */
   stone: { materialId: string; thicknessMm: number; finish: string; sqm: number } | null;
+  /** Target completion, its reminders, and whether to email the client a summary. */
+  notices: NoticeChoices;
 };
 
 export type Validated = { ok: true; value: NewJobInput } | { ok: false; reason: string };
@@ -70,7 +74,8 @@ function phoneOf(v: unknown): string | null {
   return phone;
 }
 
-export function validateNewJob(f: Record<string, unknown>): Validated {
+/** `today` is YYYY-MM-DD in the business zone; tests pass their own. */
+export function validateNewJob(f: Record<string, unknown>, today = isoDay(new Date())): Validated {
   // ---- the client
   let client: NewJobInput["client"];
   let kind: CustomerKind;
@@ -162,6 +167,10 @@ export function validateNewJob(f: Record<string, unknown>): Validated {
     const finish = str(f.finish);
     if (!finish || finish.length > MAX.finish) return { ok: false, reason: "Pick the finish." };
 
+    if (isNewStoneKey(materialId) && !newStoneName(materialId)) {
+      return { ok: false, reason: "Give the stone's name, up to 80 characters." };
+    }
+
     // A catalogue colour is only made in some thicknesses and finishes; the
     // form offers only those, and this holds to it.
     if (isCatalogueKey(materialId)) {
@@ -185,6 +194,10 @@ export function validateNewJob(f: Record<string, unknown>): Validated {
     stone = { materialId, thicknessMm, finish, sqm: Math.round(sqm * 100) / 100 };
   }
 
+  // ---- the target, its reminders, and the client's email
+  const notices = readNoticeChoices(f, today);
+  if (!notices.ok) return notices;
+
   return {
     ok: true,
     value: {
@@ -197,6 +210,7 @@ export function validateNewJob(f: Record<string, unknown>): Validated {
       suburb,
       notes: notes || null,
       stone,
+      notices: notices.value,
     },
   };
 }
@@ -213,6 +227,12 @@ export function nextJobNumber(now: Date, existing: readonly string[]): string {
   }
   return `${prefix}${String(highest + 1).padStart(3, "0")}`;
 }
+
+/** Midnight at the start of a YYYY-MM-DD day, in the business zone. */
+const dayStart = (day: string) => {
+  const [y, m, d] = day.split("-").map(Number);
+  return zonedTime(y, m, d, 0, 0);
+};
 
 type Tx = Parameters<Parameters<typeof db.$transaction>[0]>[0];
 
@@ -244,9 +264,19 @@ export async function customerWithPhone(tx: Tx, phone: string): Promise<{ id: st
  * linked to the material on file of that colour if there is one by now, and
  * otherwise named on the job with no material: nothing is on the rack yet, and
  * a material made here would have no cost, which would read as free stone in
- * Financials. It is linked once the stone arrives through Add stock.
+ * Financials. It is linked once the stone arrives through Add stock. A stone
+ * typed in is treated the same way.
  */
 async function stoneFor(tx: Tx, value: string): Promise<{ name: string; materialId: string | null }> {
+  // Typed in: linked if it turns out to be on file after all, by name.
+  if (isNewStoneKey(value)) {
+    const name = newStoneName(value);
+    const m = await tx.material.findFirst({
+      where: { name: { equals: name, mode: "insensitive" } },
+      select: { id: true, name: true },
+    });
+    return m ? { name: m.name, materialId: m.id } : { name, materialId: null };
+  }
   if (isCatalogueKey(value)) {
     const pick = fromCatalogueKey(value);
     if (!pick) throw new Refused("That colour is not on the list. Pick it again.");
@@ -315,6 +345,8 @@ export async function createJob(input: NewJobInput, userId: string, now = new Da
             // Only a company's job has someone else on site.
             siteContactName: isCompany ? input.siteContactName : null,
             siteContactPhone: isCompany ? input.siteContactPhone : null,
+            targetCompletionAt: input.notices.target ? dayStart(input.notices.target) : null,
+            reminderDays: input.notices.reminderDays,
           },
         });
 

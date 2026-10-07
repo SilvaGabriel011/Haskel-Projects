@@ -25,6 +25,8 @@ The two deploy independently and neither can break the other.
 | 10 | Follow-up board (overdue, missing detail) | Done |
 | 11 | Eleven stages and the stage timeline | Done |
 | 12 | Grouping jobs that are near each other | Done |
+| 13 | Finding a stone by typing on New job; adding one that isn't listed | Done |
+| 14 | Finding a client by typing; the client's summary email and the job's calendar entries | Done; email needs a Resend key (below) |
 
 Every screen now runs on real (seeded) data. No shells left.
 
@@ -173,6 +175,48 @@ A few decisions worth knowing:
 
 The rules live in `lib/stock-input.ts`, free of the database so they are unit
 tested directly rather than only by clicking through the modal.
+
+## Opening a job: who hears about it
+
+New job finds a client or a stone by typing: a client by name, contact,
+suburb or any run of their phone digits; a stone by colour or brand, in any
+order. Before anything is typed, each box offers the recent picks, and the
+stone box the most-chosen too. A stone on no list can be added as typed; it
+is named on the job with no material behind it, like a catalogue colour not
+yet on the rack, so nothing reads as free stone in Financials.
+
+**After saving** sets a target completion day (presets of 1, 2, 4 and 6
+weeks; it starts at 2 weeks for small work and 4 for a benchtop or
+splashback) and any reminders before it (2 weeks, 1 week, 3 days, 1 day;
+none ticked to start). Saving then:
+
+- **emails the client**, automatically, if they have an address: the job
+  number, kind of job, site, who is at the site, the stone and the target,
+  ending with `BUSINESS_CONTACT`. **Only what a client should see**: the
+  office's notes and any money never go out. Sent through Resend
+  (`RESEND_API_KEY`, `MAIL_FROM`), the same sender as "Forgot PIN?";
+- **adds all-day entries to the company calendar, marked free** so they
+  block nobody's time: the day the job opened, the target day, and each
+  reminder. Reminders are entries of their own, not alarms on the due entry:
+  the app writes as a service account, and an alarm on an event only rings
+  for whoever set it, which would be the robot. An entry on the day shows to
+  everyone sharing the calendar and rings for anyone whose notifications for
+  that calendar are on.
+
+**As the job moves**, the client is emailed again when it reaches a stage
+that means something to them: Quoted, Order Active, Measured, Factory,
+Ready For Dispatch and Invoice (`STAGE_EMAILS` in `lib/job-notices.ts`).
+The workshop's own stages (Purchase Order, Details and so on) stay quiet.
+Each stage is entered once, so nobody is told twice. The button that moves
+the job says when the client was emailed.
+
+None of this ever stops a job opening or moving. The job page says what happened once,
+straight after saving; a failure names what to do. The rules are in
+`lib/job-notices.ts` (pure, unit tested), the sending in
+`lib/job-notices-send.ts`.
+
+On the job page, the client's email and phone are links: `mailto:` with the
+job number as the subject, and `tel:`.
 
 ## The one public route
 
