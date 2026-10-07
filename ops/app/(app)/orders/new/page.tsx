@@ -4,7 +4,10 @@ import Link from "next/link";
 import { NewJobForm } from "@/components/new-job-form";
 import { PageHead } from "@/components/page-head";
 import { requireAdmin } from "@/lib/guard";
-import { listClientOptions, recentStoneLines } from "@/lib/queries/orders";
+import { isoDay } from "@/lib/business-time";
+import { calendarConfigured } from "@/lib/google-calendar";
+import { mailConfigured } from "@/lib/mail";
+import { listClientOptions, recentClientIds, recentStoneLines } from "@/lib/queries/orders";
 import { listMaterialOptions } from "@/lib/queries/stock";
 import { SUBURBS } from "@/lib/suburbs";
 
@@ -16,10 +19,11 @@ export const metadata: Metadata = { title: "New job" };
  */
 export default async function NewJobPage() {
   await requireAdmin();
-  const [clients, materials, pastStone] = await Promise.all([
+  const [clients, materials, pastStone, recentClients] = await Promise.all([
     listClientOptions(),
     listMaterialOptions(),
     recentStoneLines(),
+    recentClientIds(),
   ]);
   const suburbs = SUBURBS.map((s) => s.name).sort((a, b) => a.localeCompare(b));
 
@@ -35,7 +39,16 @@ export default async function NewJobPage() {
           lede="Who the client is, where the work is, and the stone if it is chosen yet. It starts at Initial Stage like any other job."
         />
       </div>
-      <NewJobForm clients={clients} materials={materials} suburbs={suburbs} pastStone={pastStone} />
+      <NewJobForm
+        clients={clients}
+        recentClients={recentClients}
+        materials={materials}
+        suburbs={suburbs}
+        pastStone={pastStone}
+        today={isoDay(new Date())}
+        mailReady={mailConfigured()}
+        calendarReady={calendarConfigured()}
+      />
     </>
   );
 }

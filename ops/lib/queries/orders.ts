@@ -36,6 +36,10 @@ const SHARED_ORDER_SELECT = {
   // The homeowner, when a company is the client. Installers need it to get in.
   siteContactName: true,
   siteContactPhone: true,
+  // Set on New job: when it should be done, and who was told.
+  targetCompletionAt: true,
+  reminderDays: true,
+  summaryEmailedAt: true,
   customer: { select: { id: true, name: true, phone: true, suburb: true } },
 } satisfies Prisma.OrderSelect;
 
@@ -239,9 +243,20 @@ export async function stageHistory(orderId: string) {
 /** Clients for the New job picker: companies and people, by name. Admin only. */
 export async function listClientOptions() {
   return db.customer.findMany({
-    select: { id: true, kind: true, name: true, contactName: true, phone: true, suburb: true },
+    select: { id: true, kind: true, name: true, contactName: true, phone: true, email: true, suburb: true },
     orderBy: { name: "asc" },
   });
+}
+
+/** The clients of the most recent jobs, newest first, each once: "Recent clients" on New job. */
+export async function recentClientIds(take = 5) {
+  const rows = await db.order.findMany({
+    select: { customerId: true },
+    orderBy: { createdAt: "desc" },
+    distinct: ["customerId"],
+    take,
+  });
+  return rows.map((r) => r.customerId);
 }
 
 /**

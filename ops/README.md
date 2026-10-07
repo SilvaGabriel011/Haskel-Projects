@@ -26,6 +26,7 @@ The two deploy independently and neither can break the other.
 | 11 | Eleven stages and the stage timeline | Done |
 | 12 | Grouping jobs that are near each other | Done |
 | 13 | Finding a stone by typing on New job; adding one that isn't listed | Done |
+| 14 | Finding a client by typing; the client's summary email and the job's calendar entries | Done; email needs a Resend key (below) |
 
 Every screen now runs on real (seeded) data. No shells left.
 
@@ -174,6 +175,39 @@ A few decisions worth knowing:
 
 The rules live in `lib/stock-input.ts`, free of the database so they are unit
 tested directly rather than only by clicking through the modal.
+
+## Opening a job: who hears about it
+
+New job finds a client or a stone by typing: a client by name, contact,
+suburb or any run of their phone digits; a stone by colour or brand, in any
+order. Before anything is typed, each box offers the recent picks, and the
+stone box the most-chosen too. A stone on no list can be added as typed; it
+is named on the job with no material behind it, like a catalogue colour not
+yet on the rack, so nothing reads as free stone in Financials.
+
+**After saving** sets a target completion day (presets of 1, 2, 4 and 6
+weeks; it starts at 2 weeks for small work and 4 for a benchtop or
+splashback), reminders before it (2 weeks, 1 week, 3 days, 1 day; 1 week
+and 1 day ticked), and whether to email the client. Saving then:
+
+- **emails the client** everything entered, notes included, in plain text,
+  ending with `BUSINESS_CONTACT`. Sent through Resend (`RESEND_API_KEY`,
+  `MAIL_FROM`), the same sender as "Forgot PIN?";
+- **adds all-day entries to the company calendar, marked free** so they
+  block nobody's time: the day the job opened, the target day, and each
+  reminder. Reminders are entries of their own, not alarms on the due entry:
+  the app writes as a service account, and an alarm on an event only rings
+  for whoever set it, which would be the robot. An entry on the day shows to
+  everyone sharing the calendar and rings for anyone whose notifications for
+  that calendar are on.
+
+Neither ever stops a job opening. The job page says what happened once,
+straight after saving; a failure names what to do. The rules are in
+`lib/job-notices.ts` (pure, unit tested), the sending in
+`lib/job-notices-send.ts`.
+
+On the job page, the client's email and phone are links: `mailto:` with the
+job number as the subject, and `tel:`.
 
 ## The one public route
 

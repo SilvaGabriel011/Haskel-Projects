@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CustomerKind, MaterialKind } from "@prisma/client";
 
@@ -18,7 +18,18 @@ import { MATERIAL_KINDS, MATERIAL_KIND_LABEL } from "@/lib/stock-input";
 import { type StoneMaterial, isNewStoneKey, newStoneKey, newStoneName } from "@/lib/stone";
 import { colourOptions, rangeOptions, sizeOptions } from "@/lib/stone-catalogue";
 import { allStoneChoices, chosenStones, type PastStoneLine, type StoneChoice } from "@/lib/stone-search";
+import { SearchBox, type SearchItem } from "@/components/search-box";
 import { StoneSearch } from "@/components/stone-search";
+import { clientHint, newClientFrom, searchClients } from "@/lib/client-search";
+import {
+  DEFAULT_REMINDERS,
+  DEFAULT_TARGET_WEEKS,
+  REMINDER_PRESETS,
+  TARGET_PRESETS_WEEKS,
+  addDaysTo,
+  dayLabel,
+  reminderLabel,
+} from "@/lib/job-notices";
 import type { JobType } from "@prisma/client";
 
 export type ClientOption = {
@@ -27,6 +38,7 @@ export type ClientOption = {
   name: string;
   contactName: string | null;
   phone: string;
+  email: string | null;
   suburb: string;
 };
 
@@ -46,14 +58,24 @@ type Values = Record<string, string>;
  */
 export function NewJobForm({
   clients,
+  recentClients,
   materials,
   suburbs,
   pastStone,
+  today,
+  mailReady,
+  calendarReady,
 }: {
   clients: ClientOption[];
+  /** Client ids of the latest jobs, newest first. */
+  recentClients: string[];
   materials: StoneMaterial[];
   suburbs: string[];
   pastStone: PastStoneLine[];
+  /** YYYY-MM-DD in the business zone, from the server. */
+  today: string;
+  mailReady: boolean;
+  calendarReady: boolean;
 }) {
   const router = useRouter();
   const [v, setV] = useState<Values>({
@@ -62,6 +84,8 @@ export function NewJobForm({
     source: "PHONE",
     jobType: "",
     pipeline: "",
+    targetDate: "",
+    reminders: DEFAULT_REMINDERS.join(","),
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -74,6 +98,45 @@ export function NewJobForm({
   const existing = v.clientMode === "existing";
   const picked = clients.find((c) => c.id === v.customerId);
   const isCompany = existing ? picked?.kind === "COMPANY" : v.clientKind === "COMPANY";
+
+  function pickClient(id: string) {
+    const c = clients.find((x) => x.id === id);
+    // Their suburb is a fair first guess for where the work is, and follows a
+    // change of client. One typed by hand stays.
+    const guessed = !v.suburb || v.suburb === picked?.suburb;
+    set({ customerId: id, ...(c && guessed ? { suburb: c.suburb } : {}) });
+  }
+
+  const clientItems = useCallback(
+    (typed: string): SearchItem[] => {
+      const item = (group: string) => (c: ClientOption): SearchItem => ({
+        key: `c:${c.id}`,
+        group,
+        label: c.name,
+        hint: clientHint(c),
+      });
+      if (!typed) {
+        return recentClients
+          .map((id) => clients.find((c) => c.id === id))
+          .filter((c): c is ClientOption => Boolean(c))
+          .map(item("Recent clients"));
+      }
+      const found: SearchItem[] = searchClients(clients, typed).map(item("Matches"));
+      const fresh = newClientFrom(typed);
+      if (fresh) {
+        const what = "phone" in fresh ? `with phone ${fresh.phone}` : `“${fresh.clientName}”`;
+        found.push({ key: `new:${JSON.stringify(fresh)}`, group: "Not on file", label: `Create a client profile ${what}` });
+      }
+      return found;
+    },
+    [clients, recentClients],
+  );
+
+  // ---- after saving: the client's email and the calendar
+  const clientEmail = existing ? picked?.email ?? "" : (v.email ?? "").trim();
+  const canEmail = mailReady && Boolean(clientEmail);
+  const emailClient = canEmail && v.emailClient !== "off";
+  const reminders = (v.reminders ?? "").split(",").filter(Boolean).map(Number);
 
   const stoneType = (v.stoneType ?? "") as MaterialKind | "";
   // Each list follows the one before: type → range → colour → what that
@@ -108,13 +171,13 @@ export function NewJobForm({
     // clientKind saying COMPANY.
     const clientKind = isCompany ? "COMPANY" : "PERSON";
     try {
-      const res = await openJob({ ...v, clientKind });
+      const res = await openJob({ ...v, clientKind, emailClient: emailClient ? "on" : "" });
       if (!res.ok) {
         setError(res.reason);
         setSaving(false);
         return;
       }
-      router.push(`/orders/${res.orderId}`);
+      router.push(`/orders/${res.orderId}?opened=1&email=${res.email}&calendar=${res.calendar}`);
     } catch {
       // A dropped connection or a server fault: say so, and let them try
       // again, rather than leave the button stuck on "Opening…".
@@ -138,35 +201,44 @@ export function NewJobForm({
         ) : null}
 
         {existing ? (
-          <Field id="customerId" label="Client">
-            <select
-              id="customerId"
-              className={field}
-              value={v.customerId ?? ""}
-              onChange={(e) => {
-                const c = clients.find((x) => x.id === e.target.value);
-                // Their suburb is a fair first guess for where the work is,
-                // and follows a change of client. One typed by hand stays.
-                const guessed = !v.suburb || v.suburb === picked?.suburb;
-                set({ customerId: e.target.value, ...(c && guessed ? { suburb: c.suburb } : {}) });
-              }}
-            >
-              <option value="">Pick one…</option>
-              {(["COMPANY", "PERSON"] as const).map((k) => {
-                const group = clients.filter((c) => c.kind === k);
-                return group.length ? (
-                  <optgroup key={k} label={k === "COMPANY" ? "Companies" : "People"}>
-                    {group.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                        {c.contactName ? ` (${c.contactName})` : ""} — {c.phone}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null;
-              })}
-            </select>
-          </Field>
+          <>
+            <Field id="clientSearch" label="Find a client" hint="By name, contact, suburb or any part of the phone number.">
+              <SearchBox
+                id="clientSearch"
+                label="Clients"
+                className={field}
+                placeholder={recentClients.length ? "Type to search, or pick a recent client" : "Type to search"}
+                itemsFor={clientItems}
+                onChoose={(item) => {
+                  if (item.key.startsWith("c:")) return pickClient(item.key.slice(2));
+                  set({ clientMode: "new", ...JSON.parse(item.key.slice(4)) });
+                }}
+              />
+            </Field>
+            <Field id="customerId" label="Client">
+              <select
+                id="customerId"
+                className={field}
+                value={v.customerId ?? ""}
+                onChange={(e) => pickClient(e.target.value)}
+              >
+                <option value="">Pick one…</option>
+                {(["COMPANY", "PERSON"] as const).map((k) => {
+                  const group = clients.filter((c) => c.kind === k);
+                  return group.length ? (
+                    <optgroup key={k} label={k === "COMPANY" ? "Companies" : "People"}>
+                      {group.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                          {c.contactName ? ` (${c.contactName})` : ""} — {c.phone}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null;
+                })}
+              </select>
+            </Field>
+          </>
         ) : (
           <>
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Kind of client">
@@ -297,12 +369,15 @@ export function NewJobForm({
               id="jobType"
               className={field}
               value={v.jobType}
-              onChange={(e) =>
+              onChange={(e) => {
+                const t = e.target.value as JobType | "";
                 set({
-                  jobType: e.target.value,
-                  pipeline: e.target.value ? defaultPipeline(e.target.value as JobType) : "",
-                })
-              }
+                  jobType: t,
+                  pipeline: t ? defaultPipeline(t) : "",
+                  // Start the target from the kind of job, until someone sets one.
+                  ...(v.targetTouched ? {} : { targetDate: t ? addDaysTo(today, DEFAULT_TARGET_WEEKS[t] * 7) : "" }),
+                });
+              }}
             >
               <option value="">Pick one…</option>
               {JOB_TYPES.map((t) => (
@@ -529,6 +604,90 @@ export function NewJobForm({
           Thicknesses and finishes are what each colour is made in. A colour not listed can be typed into Find a
           stone and added.
         </p>
+      </Section>
+
+      {/* ---------------------------------------------------------- after saving */}
+      <Section n={5} title="After saving" hint="When it should be done, and who hears about it.">
+        <div className="grid gap-3">
+          <span className={labelCls} id="targetLabel">
+            Target completion
+          </span>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="targetLabel">
+            {TARGET_PRESETS_WEEKS.map((w) => {
+              const day = addDaysTo(today, w * 7);
+              return (
+                <Choice key={w} on={v.targetDate === day} onClick={() => set({ targetDate: day, targetTouched: "1" })}>
+                  {w === 1 ? "1 week" : `${w} weeks`}
+                </Choice>
+              );
+            })}
+            <Choice on={!v.targetDate} onClick={() => set({ targetDate: "", targetTouched: "1" })}>
+              No target
+            </Choice>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field id="targetDate" label="Or pick the day" hint={v.targetDate ? dayLabel(v.targetDate) : "No target set."}>
+              <input
+                id="targetDate"
+                type="date"
+                min={today}
+                className={field}
+                value={v.targetDate ?? ""}
+                onChange={(e) => set({ targetDate: e.target.value, targetTouched: "1" })}
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="grid gap-3">
+          <span className={labelCls} id="remindersLabel">
+            Reminders in the calendar
+          </span>
+          <div className="flex flex-wrap gap-x-5 gap-y-2" role="group" aria-labelledby="remindersLabel">
+            {REMINDER_PRESETS.map((n) => (
+              <label key={n} className={`flex items-center gap-2 text-sm ${v.targetDate ? "" : "text-muted"}`}>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-rose"
+                  disabled={!v.targetDate}
+                  checked={reminders.includes(n)}
+                  onChange={(e) =>
+                    set({
+                      reminders: (e.target.checked ? [...reminders, n] : reminders.filter((x) => x !== n)).join(","),
+                    })
+                  }
+                />
+                {reminderLabel(n)}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-ink-2">
+            {calendarReady
+              ? "Saving adds all-day entries to the company calendar, marked free: today for the job opening, the target day, and each reminder."
+              : "The company calendar is not connected yet, so nothing is added to it. Settings shows what is missing."}
+          </p>
+        </div>
+
+        <label className={`flex items-start gap-3 text-sm ${canEmail ? "" : "text-muted"}`}>
+          <input
+            id="emailClient"
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 accent-rose"
+            disabled={!canEmail}
+            checked={emailClient}
+            onChange={(e) => set({ emailClient: e.target.checked ? "on" : "off" })}
+          />
+          <span>
+            <b className="text-ink">Email the client a summary of this job</b>
+            <span className="block text-xs text-ink-2">
+              {!mailReady
+                ? "Email is not set up yet (RESEND_API_KEY and MAIL_FROM)."
+                : clientEmail
+                  ? `Everything above, notes included, goes to ${clientEmail}.`
+                  : "No email address for this client."}
+            </span>
+          </span>
+        </label>
       </Section>
 
       {error ? (

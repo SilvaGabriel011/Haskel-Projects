@@ -114,6 +114,66 @@ test("a stone is found by typing, sets the lists, and one not listed can be adde
   await expect(listbox.getByRole("option").first()).toContainText(`Blue Bahia ${stamp}`);
 });
 
+test("a client is found by typing, and one not on file starts a new profile", async ({ page }) => {
+  await page.goto("/orders/new");
+  const search = page.getByRole("combobox", { name: "Find a client" });
+
+  // By any part of the phone number, however it was written.
+  await search.fill("8356");
+  const found = page.getByRole("listbox", { name: "Clients" });
+  await found.getByRole("option", { name: "Seaview Builders" }).click();
+  await expect(page.locator("#customerId option:checked")).toContainText("Seaview Builders");
+  await expect(page.locator("#suburb")).toHaveValue("Glenelg");
+
+  // A name not on file offers a new profile, with the name filled in.
+  await search.fill("Jo Newperson");
+  await found.getByRole("option", { name: /Create a client profile “Jo Newperson”/ }).click();
+  await expect(page.locator("#clientName")).toHaveValue("Jo Newperson");
+});
+
+test("the target, its reminders and the email choice reach the job page", async ({ page }) => {
+  await page.goto("/orders/new");
+  await page.getByRole("combobox", { name: "Find a client" }).fill("hills");
+  await page.getByRole("listbox", { name: "Clients" }).getByRole("option", { name: "Hills Kitchens" }).click();
+  await page.fill("#address", "1 Test St");
+
+  // The kind of job sets a starting target: four weeks for a benchtop.
+  const today = await page.locator("#targetDate").getAttribute("min");
+  const plus = (days: number) => {
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  await page.selectOption("#jobType", "FULL_BENCHTOP");
+  await expect(page.locator("#targetDate")).toHaveValue(plus(28));
+  await page.getByRole("radio", { name: "2 weeks" }).click();
+  await expect(page.locator("#targetDate")).toHaveValue(plus(14));
+  // Choosing the job again leaves a target someone set alone.
+  await page.selectOption("#jobType", "SPLASHBACK");
+  await expect(page.locator("#targetDate")).toHaveValue(plus(14));
+
+  await expect(page.getByRole("checkbox", { name: "1 week before" })).toBeChecked();
+  await page.getByRole("checkbox", { name: "3 days before" }).check();
+  await page.getByRole("checkbox", { name: "1 day before" }).uncheck();
+
+  // CI has no mail service: the choice is shown, and off.
+  await expect(page.locator("#emailClient")).toBeDisabled();
+  await expect(page.getByText("Email is not set up yet")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open the job" }).click();
+  await page.waitForURL(/\/orders\/(?!new)[^/]+$/);
+  await expect(page.getByRole("status").filter({ hasText: "Job opened." })).toBeVisible();
+  await expect(page.getByText(/^Target: /)).toBeVisible();
+  await expect(page.getByText("Reminders 1 week before, 3 days before")).toBeVisible();
+
+  // The client's email and phone open the mail app and the dialler.
+  await expect(page.getByRole("link", { name: "jobs@hillskitchens.example.com" })).toHaveAttribute(
+    "href",
+    /^mailto:jobs@hillskitchens\.example\.com\?subject=Your%20job%20HP-/,
+  );
+  await expect(page.getByRole("link", { name: "08 8370 1200" })).toHaveAttribute("href", "tel:0883701200");
+});
+
 test("the suburb follows the client picked, takes a town off the list, and a typed one stays", async ({ page }) => {
   await page.goto("/orders/new");
   // The two seeded companies live in different suburbs.

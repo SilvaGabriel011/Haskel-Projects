@@ -15,9 +15,10 @@
  */
 import { Prisma, type CustomerKind, type CustomerSource, type JobType, type Pipeline } from "@prisma/client";
 
-import { zonedParts } from "@/lib/business-time";
+import { isoDay, zonedParts, zonedTime } from "@/lib/business-time";
 import { db } from "@/lib/db";
 import { CUSTOMER_SOURCES, JOB_TYPES, defaultPipeline } from "@/lib/job-options";
+import { readNoticeChoices, type NoticeChoices } from "@/lib/job-notices";
 import { describeStone, isNewStoneKey, newStoneName } from "@/lib/stone";
 import { fromCatalogueKey, isCatalogueKey, onFileFor } from "@/lib/stone-catalogue";
 import { normaliseSuburb } from "@/lib/suburbs";
@@ -48,6 +49,8 @@ export type NewJobInput = {
    * or one typed in that is on no list, which is "new:name".
    */
   stone: { materialId: string; thicknessMm: number; finish: string; sqm: number } | null;
+  /** Target completion, its reminders, and whether to email the client a summary. */
+  notices: NoticeChoices;
 };
 
 export type Validated = { ok: true; value: NewJobInput } | { ok: false; reason: string };
@@ -71,7 +74,8 @@ function phoneOf(v: unknown): string | null {
   return phone;
 }
 
-export function validateNewJob(f: Record<string, unknown>): Validated {
+/** `today` is YYYY-MM-DD in the business zone; tests pass their own. */
+export function validateNewJob(f: Record<string, unknown>, today = isoDay(new Date())): Validated {
   // ---- the client
   let client: NewJobInput["client"];
   let kind: CustomerKind;
@@ -190,6 +194,13 @@ export function validateNewJob(f: Record<string, unknown>): Validated {
     stone = { materialId, thicknessMm, finish, sqm: Math.round(sqm * 100) / 100 };
   }
 
+  // ---- the target, its reminders, and the client's email
+  const notices = readNoticeChoices(f, today);
+  if (!notices.ok) return notices;
+  if (notices.value.emailClient && "create" in client && !client.create.email) {
+    return { ok: false, reason: "Add the client's email to send them the summary, or untick it." };
+  }
+
   return {
     ok: true,
     value: {
@@ -202,6 +213,7 @@ export function validateNewJob(f: Record<string, unknown>): Validated {
       suburb,
       notes: notes || null,
       stone,
+      notices: notices.value,
     },
   };
 }
@@ -218,6 +230,12 @@ export function nextJobNumber(now: Date, existing: readonly string[]): string {
   }
   return `${prefix}${String(highest + 1).padStart(3, "0")}`;
 }
+
+/** Midnight at the start of a YYYY-MM-DD day, in the business zone. */
+const dayStart = (day: string) => {
+  const [y, m, d] = day.split("-").map(Number);
+  return zonedTime(y, m, d, 0, 0);
+};
 
 type Tx = Parameters<Parameters<typeof db.$transaction>[0]>[0];
 
@@ -330,6 +348,8 @@ export async function createJob(input: NewJobInput, userId: string, now = new Da
             // Only a company's job has someone else on site.
             siteContactName: isCompany ? input.siteContactName : null,
             siteContactPhone: isCompany ? input.siteContactPhone : null,
+            targetCompletionAt: input.notices.target ? dayStart(input.notices.target) : null,
+            reminderDays: input.notices.reminderDays,
           },
         });
 

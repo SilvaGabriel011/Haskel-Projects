@@ -35,8 +35,21 @@ export const RELEASES: readonly Release[] = [
   {
     version: "1.8.0",
     date: "2026-10-07",
-    title: "Find a stone by typing",
+    title: "Searching, the client's email and the calendar",
     items: [
+      {
+        text: "New job has a “Find a client” box: type a name, contact, suburb or any part of the phone number, or pick a recent client. A name not on file starts a new profile.",
+        roles: ADMIN,
+        href: "/orders/new",
+      },
+      {
+        text: "New job sets a target completion day and reminders before it. Saving adds the job to the company calendar, and can email the client a summary of everything entered.",
+        roles: ADMIN,
+        href: "/orders/new",
+      },
+      {
+        text: "On a job, the client's email and phone open your mail app and dialler.",
+      },
       {
         text: "New job has a “Find a stone” box: type a colour or brand to search every stone, or pick from the ones chosen most recently and most often.",
         roles: ADMIN,

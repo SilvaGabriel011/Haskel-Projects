@@ -6,6 +6,7 @@ import { record } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { requireAdmin, requireUser } from "@/lib/guard";
 import { STAGE_LABEL } from "@/lib/pipeline";
+import { sendJobNotices } from "@/lib/job-notices-send";
 import { createJob, validateNewJob } from "@/lib/new-job";
 import { moveOrder } from "@/lib/order-move";
 import { releaseStock, reserveStock, type StockKind } from "@/lib/reservations";
@@ -104,8 +105,15 @@ export async function openJob(form: Record<string, unknown>) {
   if (!res.ok) return res;
   await record(me, "job.opened", `Opened ${res.jobNumber}`, `/orders/${res.orderId}`);
 
+  // The job is open whatever happens here; the outcome goes to the job page.
+  const notices = await sendJobNotices(res.orderId, { emailClient: parsed.value.notices.emailClient });
+  if (notices.email === "sent") {
+    await record(me, "job.emailed", `Emailed ${res.jobNumber}'s summary to the client`, `/orders/${res.orderId}`);
+  }
+  if (notices.detail) console.error(`New job ${res.jobNumber}: ${notices.detail}`);
+
   revalidatePath("/orders");
   revalidatePath("/board");
   revalidatePath("/dashboard");
-  return res;
+  return { ...res, email: notices.email, calendar: notices.calendar };
 }
