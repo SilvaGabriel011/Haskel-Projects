@@ -20,7 +20,7 @@
  */
 import type { MaterialKind } from "@prisma/client";
 
-import { finishOptions, thicknessOptions } from "@/lib/stone";
+import { finishOptions, isNewStoneKey, newStoneName, thicknessOptions } from "@/lib/stone";
 
 export type CatalogueColour = {
   name: string;
@@ -282,6 +282,9 @@ export function colourOptions(kind: MaterialKind | "", rangeId: string, material
 export function sizeOptions(value: string, materials: readonly FileMaterial[]) {
   const none = { thicknesses: [] as number[], finishes: [] as string[], thicknessMm: "", finish: "" };
   if (!value) return none;
+
+  // A stone typed in could be any of the usual sizes, and any finish.
+  if (isNewStoneKey(value)) return newStoneName(value) ? finish(thicknessOptions(), finishOptions()) : none;
 
   if (isCatalogueKey(value)) {
     const pick = fromCatalogueKey(value);

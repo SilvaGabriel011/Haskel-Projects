@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CustomerKind, MaterialKind } from "@prisma/client";
 
@@ -15,8 +15,10 @@ import {
 } from "@/lib/job-options";
 import { PIPELINE_LABEL } from "@/lib/pipeline";
 import { MATERIAL_KINDS, MATERIAL_KIND_LABEL } from "@/lib/stock-input";
-import { type StoneMaterial } from "@/lib/stone";
+import { type StoneMaterial, isNewStoneKey, newStoneKey, newStoneName } from "@/lib/stone";
 import { colourOptions, rangeOptions, sizeOptions } from "@/lib/stone-catalogue";
+import { allStoneChoices, chosenStones, type PastStoneLine, type StoneChoice } from "@/lib/stone-search";
+import { StoneSearch } from "@/components/stone-search";
 import type { JobType } from "@prisma/client";
 
 export type ClientOption = {
@@ -46,10 +48,12 @@ export function NewJobForm({
   clients,
   materials,
   suburbs,
+  pastStone,
 }: {
   clients: ClientOption[];
   materials: StoneMaterial[];
   suburbs: string[];
+  pastStone: PastStoneLine[];
 }) {
   const router = useRouter();
   const [v, setV] = useState<Values>({
@@ -77,6 +81,23 @@ export function NewJobForm({
   const ranges = rangeOptions(stoneType, materials);
   const colours = colourOptions(stoneType, v.stoneRange ?? "", materials);
   const sizes = sizeOptions(v.materialId ?? "", materials);
+  const typedStone = isNewStoneKey(v.materialId ?? "") ? newStoneName(v.materialId ?? "") : "";
+
+  // The search box offers every stone the dropdowns do, headed by the office's habits.
+  const stoneChoices = useMemo(() => allStoneChoices(materials), [materials]);
+  const chosen = useMemo(() => chosenStones(pastStone, stoneChoices), [pastStone, stoneChoices]);
+
+  /** Picked in the search box: the dropdowns follow, so the choice reads the same either way. */
+  function pickStone(c: StoneChoice) {
+    const next = sizeOptions(c.value, materials);
+    set({
+      stoneType: c.kind ?? "",
+      stoneRange: c.kind ? c.rangeId : "",
+      materialId: c.value,
+      thicknessMm: next.thicknessMm,
+      finish: next.finish,
+    });
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -322,92 +343,170 @@ export function NewJobForm({
 
       {/* ---------------------------------------------------------- stone */}
       <Section n={4} title="The stone" hint="Optional. Leave it until the quote if it is not chosen yet.">
+        <Field
+          id="stoneSearch"
+          label="Find a stone"
+          hint="Search every brand and colour, or use the lists below. A stone that isn't listed can be added."
+        >
+          <StoneSearch
+            choices={stoneChoices}
+            recent={chosen.recent}
+            most={chosen.most}
+            className={field}
+            onPick={pickStone}
+            onAdd={(name) => {
+              const key = newStoneKey(name);
+              const next = sizeOptions(key, materials);
+              set({ stoneType: "", stoneRange: "", materialId: key, thicknessMm: next.thicknessMm, finish: next.finish });
+            }}
+          />
+        </Field>
+        {typedStone ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 text-sm">
+            <p>
+              <b className="text-ink">New stone: {typedStone}</b>
+              <span className="block text-xs text-ink-2">
+                Not on any list. It is named on the job, and linked to stock once it arrives through Add stock.
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={() => set({ materialId: "", thicknessMm: "", finish: "" })}
+              className="text-sm font-semibold text-ink-2 underline-offset-4 hover:text-rose hover:underline"
+            >
+              Clear
+            </button>
+          </div>
+        ) : null}
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field id="stoneType" label="Type of stone">
-            <select
-              id="stoneType"
-              className={field}
-              value={stoneType}
-              onChange={(e) =>
-                set({ stoneType: e.target.value, stoneRange: "", materialId: "", thicknessMm: "", finish: "" })
-              }
-            >
-              <option value="">Not chosen yet</option>
-              {MATERIAL_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {MATERIAL_KIND_LABEL[k]}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field id="stoneRange" label="Brand or stone">
-            <select
-              id="stoneRange"
-              className={field}
-              disabled={!stoneType}
-              value={v.stoneRange ?? ""}
-              onChange={(e) => set({ stoneRange: e.target.value, materialId: "", thicknessMm: "", finish: "" })}
-            >
-              <option value="">{stoneType ? "Pick one…" : "Pick the type first"}</option>
-              {ranges.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field id="materialId" label="Colour">
-            <select
-              id="materialId"
-              className={field}
-              disabled={!v.stoneRange}
-              value={v.materialId ?? ""}
-              onChange={(e) => {
-                // Start from what the colour is made in; either can be changed.
-                const next = sizeOptions(e.target.value, materials);
-                set({ materialId: e.target.value, thicknessMm: next.thicknessMm, finish: next.finish });
-              }}
-            >
-              <option value="">{v.stoneRange ? "Pick one…" : "Pick the brand first"}</option>
-              {colours.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field id="thicknessMm" label="Thickness">
-            <select
-              id="thicknessMm"
-              className={field}
-              disabled={!v.materialId}
-              value={v.thicknessMm ?? ""}
-              onChange={(e) => set({ thicknessMm: e.target.value })}
-            >
-              <option value="">{v.materialId ? "Pick one…" : "Pick the colour first"}</option>
-              {sizes.thicknesses.map((t) => (
-                <option key={t} value={t}>
-                  {t} mm
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field id="finish" label="Finish">
-            <select
-              id="finish"
-              className={field}
-              disabled={!v.materialId}
-              value={v.finish ?? ""}
-              onChange={(e) => set({ finish: e.target.value })}
-            >
-              <option value="">{v.materialId ? "Pick one…" : "Pick the colour first"}</option>
-              {sizes.finishes.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-          </Field>
+          {typedStone ? null : (
+            <>
+              <Field id="stoneType" label="Type of stone">
+                <select
+                  id="stoneType"
+                  className={field}
+                  value={stoneType}
+                  onChange={(e) =>
+                    set({ stoneType: e.target.value, stoneRange: "", materialId: "", thicknessMm: "", finish: "" })
+                  }
+                >
+                  <option value="">Not chosen yet</option>
+                  {MATERIAL_KINDS.map((k) => (
+                    <option key={k} value={k}>
+                      {MATERIAL_KIND_LABEL[k]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field id="stoneRange" label="Brand or stone">
+                <select
+                  id="stoneRange"
+                  className={field}
+                  disabled={!stoneType}
+                  value={v.stoneRange ?? ""}
+                  onChange={(e) => set({ stoneRange: e.target.value, materialId: "", thicknessMm: "", finish: "" })}
+                >
+                  <option value="">{stoneType ? "Pick one…" : "Pick the type first"}</option>
+                  {ranges.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field id="materialId" label="Colour">
+                <select
+                  id="materialId"
+                  className={field}
+                  disabled={!v.stoneRange}
+                  value={v.materialId ?? ""}
+                  onChange={(e) => {
+                    // Start from what the colour is made in; either can be changed.
+                    const next = sizeOptions(e.target.value, materials);
+                    set({ materialId: e.target.value, thicknessMm: next.thicknessMm, finish: next.finish });
+                  }}
+                >
+                  <option value="">{v.stoneRange ? "Pick one…" : "Pick the brand first"}</option>
+                  {colours.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
+          )}
+          {typedStone ? (
+            <>
+              <Field id="thicknessMm" label="Thickness (mm)">
+                <input
+                  id="thicknessMm"
+                  inputMode="numeric"
+                  list="thickness-options"
+                  autoComplete="off"
+                  className={field}
+                  value={v.thicknessMm ?? ""}
+                  onChange={(e) => set({ thicknessMm: e.target.value.replace(/\D/g, "") })}
+                />
+                <datalist id="thickness-options">
+                  {sizes.thicknesses.map((t) => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
+              </Field>
+              <Field id="finish" label="Finish" hint="Pick one or type your own.">
+                <input
+                  id="finish"
+                  list="finish-options"
+                  autoComplete="off"
+                  maxLength={40}
+                  className={field}
+                  value={v.finish ?? ""}
+                  onChange={(e) => set({ finish: e.target.value })}
+                />
+                <datalist id="finish-options">
+                  {sizes.finishes.map((f) => (
+                    <option key={f} value={f} />
+                  ))}
+                </datalist>
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field id="thicknessMm" label="Thickness">
+                <select
+                  id="thicknessMm"
+                  className={field}
+                  disabled={!v.materialId}
+                  value={v.thicknessMm ?? ""}
+                  onChange={(e) => set({ thicknessMm: e.target.value })}
+                >
+                  <option value="">{v.materialId ? "Pick one…" : "Pick the colour first"}</option>
+                  {sizes.thicknesses.map((t) => (
+                    <option key={t} value={t}>
+                      {t} mm
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field id="finish" label="Finish">
+                <select
+                  id="finish"
+                  className={field}
+                  disabled={!v.materialId}
+                  value={v.finish ?? ""}
+                  onChange={(e) => set({ finish: e.target.value })}
+                >
+                  <option value="">{v.materialId ? "Pick one…" : "Pick the colour first"}</option>
+                  {sizes.finishes.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
+          )}
           <Field id="sqm" label="Area (m²)" hint="Optional, a rough figure is fine.">
             <input
               id="sqm"
@@ -427,7 +526,8 @@ export function NewJobForm({
           </p>
         ) : null}
         <p className="text-sm text-ink-2">
-          Thicknesses and finishes are what each colour is made in. A colour not listed is added through Add stock.
+          Thicknesses and finishes are what each colour is made in. A colour not listed can be typed into Find a
+          stone and added.
         </p>
       </Section>
 

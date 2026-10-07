@@ -25,6 +25,7 @@ The two deploy independently and neither can break the other.
 | 10 | Follow-up board (overdue, missing detail) | Done |
 | 11 | Eleven stages and the stage timeline | Done |
 | 12 | Grouping jobs that are near each other | Done |
+| 13 | Finding a stone by typing on New job; adding one that isn't listed | Done |
 
 Every screen now runs on real (seeded) data. No shells left.
 

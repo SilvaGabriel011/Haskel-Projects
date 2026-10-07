@@ -33,6 +33,23 @@ const EMPLOYEE: readonly Role[] = ["EMPLOYEE"];
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "1.8.0",
+    date: "2026-10-07",
+    title: "Find a stone by typing",
+    items: [
+      {
+        text: "New job has a “Find a stone” box: type a colour or brand to search every stone, or pick from the ones chosen most recently and most often.",
+        roles: ADMIN,
+        href: "/orders/new",
+      },
+      {
+        text: "A stone that isn't on any list can be typed in and added to the job, with any thickness and finish.",
+        roles: ADMIN,
+        href: "/orders/new",
+      },
+    ],
+  },
+  {
     version: "1.7.0",
     date: "2026-10-02",
     title: "Google Calendar",

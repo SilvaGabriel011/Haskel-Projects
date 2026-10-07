@@ -4,7 +4,7 @@ import Link from "next/link";
 import { NewJobForm } from "@/components/new-job-form";
 import { PageHead } from "@/components/page-head";
 import { requireAdmin } from "@/lib/guard";
-import { listClientOptions } from "@/lib/queries/orders";
+import { listClientOptions, recentStoneLines } from "@/lib/queries/orders";
 import { listMaterialOptions } from "@/lib/queries/stock";
 import { SUBURBS } from "@/lib/suburbs";
 
@@ -16,7 +16,11 @@ export const metadata: Metadata = { title: "New job" };
  */
 export default async function NewJobPage() {
   await requireAdmin();
-  const [clients, materials] = await Promise.all([listClientOptions(), listMaterialOptions()]);
+  const [clients, materials, pastStone] = await Promise.all([
+    listClientOptions(),
+    listMaterialOptions(),
+    recentStoneLines(),
+  ]);
   const suburbs = SUBURBS.map((s) => s.name).sort((a, b) => a.localeCompare(b));
 
   return (
@@ -31,7 +35,7 @@ export default async function NewJobPage() {
           lede="Who the client is, where the work is, and the stone if it is chosen yet. It starts at Initial Stage like any other job."
         />
       </div>
-      <NewJobForm clients={clients} materials={materials} suburbs={suburbs} />
+      <NewJobForm clients={clients} materials={materials} suburbs={suburbs} pastStone={pastStone} />
     </>
   );
 }

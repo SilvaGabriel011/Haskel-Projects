@@ -61,6 +61,34 @@ Settings shows sync as connected.
 | 3.7 | Point the site's booking CTA at `ops.haskelproject.com.au/book` once 1.6 is live | Dev | ☐ |
 | 3.8 | Custom domain on the public site's Vercel project | Haskel | ☐ |
 
+### Where to take the photos
+
+Your own: at your jobs and on your rack. Photos from Google or other companies'
+sites are usually copyrighted.
+
+| Photo | Where | How |
+|---|---|---|
+| Hero | Your best finished kitchen | Landscape, daylight plus room lights, bench cleared |
+| Services (8) | One finished job of each kind | Landscape 4:3, at the end of the install, stone wiped down |
+| Before / after | The same job, at measure and at install | Same spot, same angle |
+| Job photos (6) | Recent installs | Edge and join close-ups mixed with whole-room shots |
+| Materials (6) | Close-up of the slab on your rack, or supplier images | Square, pattern filling the frame; get the supplier's OK in writing |
+| Offcuts | Each piece as it goes on the rack | Flat, tape measure in shot |
+
+Ask clients before photographing their home; leave out house numbers and faces.
+
+## Being built now: faster stone picking on New job
+
+Requested 2026-10-07: type a stone that is not on the list, see the most and
+most recently chosen, and search by typing.
+
+| # | Task | Owner | Status |
+|---|---|---|---|
+| B.1 | Type to search every stone, from a supplier range or on file | Dev | ☑ |
+| B.2 | "Recently chosen" and "Most chosen" before anything is typed | Dev | ☑ |
+| B.3 | Add a stone that is not listed, any thickness, typed finish | Dev | ☑ |
+| B.4 | Reviewed and merged | Haskel | ☐ |
+
 ## 4. Open pull requests — decide on each
 
 Old PRs drift further from `main` every week. Merge, rework or close.

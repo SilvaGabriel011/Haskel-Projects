@@ -18,7 +18,7 @@ import { Prisma, type CustomerKind, type CustomerSource, type JobType, type Pipe
 import { zonedParts } from "@/lib/business-time";
 import { db } from "@/lib/db";
 import { CUSTOMER_SOURCES, JOB_TYPES, defaultPipeline } from "@/lib/job-options";
-import { describeStone } from "@/lib/stone";
+import { describeStone, isNewStoneKey, newStoneName } from "@/lib/stone";
 import { fromCatalogueKey, isCatalogueKey, onFileFor } from "@/lib/stone-catalogue";
 import { normaliseSuburb } from "@/lib/suburbs";
 
@@ -44,7 +44,8 @@ export type NewJobInput = {
   notes: string | null;
   /**
    * The stone, by a material on file or a colour from the catalogue
-   * (lib/stone-catalogue.ts) not yet on file, which is "cat:range:colour".
+   * (lib/stone-catalogue.ts) not yet on file, which is "cat:range:colour",
+   * or one typed in that is on no list, which is "new:name".
    */
   stone: { materialId: string; thicknessMm: number; finish: string; sqm: number } | null;
 };
@@ -162,6 +163,10 @@ export function validateNewJob(f: Record<string, unknown>): Validated {
     const finish = str(f.finish);
     if (!finish || finish.length > MAX.finish) return { ok: false, reason: "Pick the finish." };
 
+    if (isNewStoneKey(materialId) && !newStoneName(materialId)) {
+      return { ok: false, reason: "Give the stone's name, up to 80 characters." };
+    }
+
     // A catalogue colour is only made in some thicknesses and finishes; the
     // form offers only those, and this holds to it.
     if (isCatalogueKey(materialId)) {
@@ -244,9 +249,19 @@ export async function customerWithPhone(tx: Tx, phone: string): Promise<{ id: st
  * linked to the material on file of that colour if there is one by now, and
  * otherwise named on the job with no material: nothing is on the rack yet, and
  * a material made here would have no cost, which would read as free stone in
- * Financials. It is linked once the stone arrives through Add stock.
+ * Financials. It is linked once the stone arrives through Add stock. A stone
+ * typed in is treated the same way.
  */
 async function stoneFor(tx: Tx, value: string): Promise<{ name: string; materialId: string | null }> {
+  // Typed in: linked if it turns out to be on file after all, by name.
+  if (isNewStoneKey(value)) {
+    const name = newStoneName(value);
+    const m = await tx.material.findFirst({
+      where: { name: { equals: name, mode: "insensitive" } },
+      select: { id: true, name: true },
+    });
+    return m ? { name: m.name, materialId: m.id } : { name, materialId: null };
+  }
   if (isCatalogueKey(value)) {
     const pick = fromCatalogueKey(value);
     if (!pick) throw new Refused("That colour is not on the list. Pick it again.");

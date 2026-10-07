@@ -75,6 +75,45 @@ test("the stone narrows step by step to what the colour is made in", async ({ pa
   expect(await options("finish")).toEqual(["Matte"]);
 });
 
+test("a stone is found by typing, sets the lists, and one not listed can be added", async ({ page }) => {
+  const stamp = Date.now().toString().slice(-7);
+  await page.goto("/orders/new");
+  const search = page.getByRole("combobox", { name: "Find a stone" });
+
+  // Typing finds a catalogue colour; picking it fills in the dropdowns.
+  await search.fill("lunar dek");
+  await page.getByRole("option", { name: /Dekton Lunar/ }).click();
+  await expect(page.locator("#stoneType")).toHaveValue("SINTERED");
+  await expect(page.locator("#stoneRange")).toHaveValue("dekton");
+  await expect(page.locator("#materialId")).toHaveValue("cat:dekton:Lunar");
+  await expect(page.locator("#thicknessMm")).toHaveValue("20");
+
+  // A name on no list is offered, picked with the keyboard, and takes any finish typed.
+  await search.fill(`Blue Bahia ${stamp}`);
+  await expect(page.getByRole("option", { name: /as a new stone/ })).toBeVisible();
+  await search.press("ArrowDown");
+  await search.press("Enter");
+  await expect(page.getByText(`New stone: Blue Bahia ${stamp}`)).toBeVisible();
+  await expect(page.locator("#stoneType")).toHaveCount(0);
+  await page.fill("#thicknessMm", "25");
+  await page.fill("#finish", "Brushed");
+
+  await page.selectOption("#customerId", { index: 1 });
+  await page.fill("#address", "1 Test St");
+  await page.fill("#suburb", "Unley");
+  await page.selectOption("#jobType", "VANITY_TOP");
+  await page.getByRole("button", { name: "Open the job" }).click();
+  await page.waitForURL(/\/orders\/(?!new)[^/]+$/);
+  await expect(page.getByText(`Blue Bahia ${stamp} · 25 mm · Brushed`)).toBeVisible();
+
+  // Next time, it is the most recent pick, before anything is typed.
+  await page.goto("/orders/new");
+  await page.getByRole("combobox", { name: "Find a stone" }).focus();
+  const listbox = page.getByRole("listbox", { name: "Stones" });
+  await expect(listbox.getByText("Recently chosen")).toBeVisible();
+  await expect(listbox.getByRole("option").first()).toContainText(`Blue Bahia ${stamp}`);
+});
+
 test("the suburb follows the client picked, takes a town off the list, and a typed one stays", async ({ page }) => {
   await page.goto("/orders/new");
   // The two seeded companies live in different suburbs.

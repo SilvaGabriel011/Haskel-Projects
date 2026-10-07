@@ -56,3 +56,21 @@ export function coloursOf<T extends { kind: MaterialKind }>(materials: readonly 
 export function describeStone(m: { name: string }, thicknessMm: number, finish: string): string {
   return [m.name, `${thicknessMm} mm`, finish].filter(Boolean).join(" · ");
 }
+
+/**
+ * A stone on no list, typed in on New job: "new:<name>". Named on the job
+ * with no material behind it, like a catalogue colour not yet on the rack.
+ */
+const NEW = "new:";
+export const MAX_STONE_NAME = 80;
+
+export const isNewStoneKey = (v: string) => v.startsWith(NEW);
+
+export const newStoneKey = (name: string) => `${NEW}${name.replace(/\s+/g, " ").trim()}`;
+
+/** The name typed for a stone on no list, tidied; empty if it is not usable. */
+export function newStoneName(v: string): string {
+  if (!isNewStoneKey(v)) return "";
+  const name = v.slice(NEW.length).replace(/\s+/g, " ").trim();
+  return name.length >= 2 && name.length <= MAX_STONE_NAME ? name : "";
+}
