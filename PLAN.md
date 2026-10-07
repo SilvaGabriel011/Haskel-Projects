@@ -87,7 +87,12 @@ most recently chosen, and search by typing.
 | B.1 | Type to search every stone, from a supplier range or on file | Dev | ☑ |
 | B.2 | "Recently chosen" and "Most chosen" before anything is typed | Dev | ☑ |
 | B.3 | Add a stone that is not listed, any thickness, typed finish | Dev | ☑ |
-| B.4 | Reviewed and merged | Haskel | ☐ |
+| B.4 | Find a client by typing; email and phone clickable on a job | Dev | ☑ |
+| B.5 | Target completion day; reminders available, none ticked to start | Dev | ☑ |
+| B.6 | Calendar entries on saving: opened, target day, any reminders (all marked free) | Dev | ☑ |
+| B.7 | Client emailed automatically: a summary on opening, updates at Quoted, Order Active, Measured, Factory, Ready For Dispatch, Invoice. Client-facing details only, never notes or money | Dev | ☑ |
+| B.8 | Resend account, `haskelproject.com.au` verified; `RESEND_API_KEY`, `MAIL_FROM`, `BUSINESS_CONTACT` set in Vercel | Haskel | ☐ |
+| B.9 | Reviewed and merged | Haskel | ☐ |
 
 ## 4. Open pull requests — decide on each
 

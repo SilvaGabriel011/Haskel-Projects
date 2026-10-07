@@ -187,12 +187,14 @@ yet on the rack, so nothing reads as free stone in Financials.
 
 **After saving** sets a target completion day (presets of 1, 2, 4 and 6
 weeks; it starts at 2 weeks for small work and 4 for a benchtop or
-splashback), reminders before it (2 weeks, 1 week, 3 days, 1 day; 1 week
-and 1 day ticked), and whether to email the client. Saving then:
+splashback) and any reminders before it (2 weeks, 1 week, 3 days, 1 day;
+none ticked to start). Saving then:
 
-- **emails the client** everything entered, notes included, in plain text,
-  ending with `BUSINESS_CONTACT`. Sent through Resend (`RESEND_API_KEY`,
-  `MAIL_FROM`), the same sender as "Forgot PIN?";
+- **emails the client**, automatically, if they have an address: the job
+  number, kind of job, site, who is at the site, the stone and the target,
+  ending with `BUSINESS_CONTACT`. **Only what a client should see**: the
+  office's notes and any money never go out. Sent through Resend
+  (`RESEND_API_KEY`, `MAIL_FROM`), the same sender as "Forgot PIN?";
 - **adds all-day entries to the company calendar, marked free** so they
   block nobody's time: the day the job opened, the target day, and each
   reminder. Reminders are entries of their own, not alarms on the due entry:
@@ -201,7 +203,14 @@ and 1 day ticked), and whether to email the client. Saving then:
   everyone sharing the calendar and rings for anyone whose notifications for
   that calendar are on.
 
-Neither ever stops a job opening. The job page says what happened once,
+**As the job moves**, the client is emailed again when it reaches a stage
+that means something to them: Quoted, Order Active, Measured, Factory,
+Ready For Dispatch and Invoice (`STAGE_EMAILS` in `lib/job-notices.ts`).
+The workshop's own stages (Purchase Order, Details and so on) stay quiet.
+Each stage is entered once, so nobody is told twice. The button that moves
+the job says when the client was emailed.
+
+None of this ever stops a job opening or moving. The job page says what happened once,
 straight after saving; a failure names what to do. The rules are in
 `lib/job-notices.ts` (pure, unit tested), the sending in
 `lib/job-notices-send.ts`.

@@ -43,9 +43,13 @@ export const RELEASES: readonly Release[] = [
         href: "/orders/new",
       },
       {
-        text: "New job sets a target completion day and reminders before it. Saving adds the job to the company calendar, and can email the client a summary of everything entered.",
+        text: "New job sets a target completion day, and reminders before it if you want them. Saving adds the job to the company calendar and emails the client a summary. Notes stay in the office.",
         roles: ADMIN,
         href: "/orders/new",
+      },
+      {
+        text: "Clients are emailed an update when their job is quoted, confirmed, measured, in the factory, ready to install and complete.",
+        roles: ADMIN,
       },
       {
         text: "On a job, the client's email and phone open your mail app and dialler.",

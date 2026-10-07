@@ -2,15 +2,17 @@
  * What opening a job tells the world: the client's summary email, and the
  * calendar entries for the job.
  *
- * When New job saves, the office can have the client emailed everything that
- * was entered, so a wrong address or stone is caught by the client on day one
- * instead of on install day. The calendar gets:
+ * When New job saves, the client is emailed what was entered about their job,
+ * so a wrong address or stone is caught by the client on day one instead of on
+ * install day. As the job moves, they are emailed again at the stages that
+ * mean something to them (STAGE_EMAILS). Only what the client should see goes
+ * out: never the office's notes, never money. The calendar gets:
  *
  * - a "ghost" entry on the day the job was opened: all day, and marked free,
  *   so it shows in the diary without blocking anyone's time;
  * - an entry on the target completion day, if one was set;
  * - a reminder entry a chosen number of days before it (presets 1, 3, 7 and
- *   14 days; 7 and 1 by default).
+ *   14 days; none ticked unless someone ticks them).
  *
  * Reminders are entries of their own, not alarms on the due entry: the app
  * writes as a service account, and an alarm set on an event only ever rings
@@ -21,13 +23,13 @@
  * Pure: imported by the form in the browser, and unit tested. Sending lives
  * in lib/job-notices-send.ts.
  */
-import type { JobType } from "@prisma/client";
+import type { JobType, OrderStatus } from "@prisma/client";
 
 import { JOB_TYPE_LABEL } from "@/lib/job-options";
 
 /** The reminder choices offered, in days before the target. */
 export const REMINDER_PRESETS = [14, 7, 3, 1] as const;
-export const DEFAULT_REMINDERS: readonly number[] = [7, 1];
+export const DEFAULT_REMINDERS: readonly number[] = [];
 
 export const reminderLabel = (days: number) =>
   days === 1 ? "1 day before" : days % 7 === 0 ? `${days / 7} week${days === 7 ? "" : "s"} before` : `${days} days before`;
@@ -89,11 +91,10 @@ export type NoticeChoices = {
   /** YYYY-MM-DD, or null for no target. */
   target: string | null;
   reminderDays: number[];
-  emailClient: boolean;
 };
 
 /**
- * The target, reminders and email choice from the form. A target must be a
+ * The target and reminders from the form. A target must be a
  * real day from today to two years out; reminders only from the presets,
  * and only with a target to count back from.
  */
@@ -118,7 +119,7 @@ export function readNoticeChoices(
         .sort((a, b) => b - a)
     : [];
 
-  return { ok: true, value: { target, reminderDays, emailClient: f.emailClient === "on" || f.emailClient === true } };
+  return { ok: true, value: { target, reminderDays } };
 }
 
 // ---- the job, as both the email and the calendar describe it
@@ -137,12 +138,14 @@ export type JobSummary = {
   /** "Dekton Lunar · 20 mm · Matte", if chosen. */
   stone: string | null;
   sqm: number | null;
+  /** The office's own notes: in the calendar, never in the client's email. */
   notes: string | null;
   /** YYYY-MM-DD. */
   target: string | null;
 };
 
-function detailLines(j: JobSummary): string[] {
+/** The job in lines. `internal` adds the office's notes, for the calendar only. */
+function detailLines(j: JobSummary, internal = false): string[] {
   return [
     `Job number: ${j.jobNumber}`,
     `Kind of job: ${JOB_TYPE_LABEL[j.jobType]}`,
@@ -153,30 +156,90 @@ function detailLines(j: JobSummary): string[] {
     j.stone ? `Stone: ${j.stone}` : "Stone: not chosen yet",
     j.stone && j.sqm ? `Area: about ${j.sqm} m²` : null,
     j.target ? `We aim to finish by: ${dayLabel(j.target)}` : null,
-    j.notes ? `Notes: ${j.notes}` : null,
+    internal && j.notes ? `Notes: ${j.notes}` : null,
   ].filter((l): l is string => Boolean(l));
 }
 
+const firstName = (j: JobSummary) => j.greetName.trim().split(/\s+/)[0] || j.greetName;
+
+const contactLine = (contact: string | null | undefined, lead: string) =>
+  contact?.trim() ? `${lead}: ${contact.trim()}.` : `${lead}.`;
+
 /**
- * The client's email: everything entered, in plain text, so it reads the
- * same in every mail app and nothing is lost to formatting. `contact` is how
+ * The client's email when their job is opened: what they should know about
+ * it, in plain text so it reads the same in every mail app. `contact` is how
  * to reach the business (BUSINESS_CONTACT), if set.
  */
 export function summaryEmail(j: JobSummary, contact?: string | null): { subject: string; text: string } {
-  const first = j.greetName.trim().split(/\s+/)[0] || j.greetName;
-  const fix = contact?.trim()
-    ? `If anything here is not right, let us know: ${contact.trim()}.`
-    : "If anything here is not right, please let us know.";
   return {
     subject: `Your job with Haskel Project: ${j.jobNumber}`,
     text: [
-      `Hi ${first},`,
+      `Hi ${firstName(j)},`,
       "",
       "Thanks for choosing Haskel Project. Here is what we have down for your job:",
       "",
       ...detailLines(j).map((l) => `  ${l}`),
       "",
-      fix,
+      contactLine(contact, "If anything here is not right, let us know"),
+      "",
+      "Haskel Project",
+    ].join("\n"),
+  };
+}
+
+/**
+ * The stages a client hears about, and what they are told. The rest are the
+ * workshop's business: a client does not need to know a purchase order went
+ * out. Moving a job into one of these emails the client, if they have an
+ * address. Words only, never the quote's figure: the quote itself goes to
+ * them the way it always has.
+ */
+export const STAGE_EMAILS: Partial<Record<OrderStatus, { subject: string; body: string }>> = {
+  QUOTED: {
+    subject: "Your quote is ready",
+    body: "Your quote is ready. If you have not received it yet, or have any questions about it, let us know.",
+  },
+  ORDER_ACTIVE: {
+    subject: "Your job is confirmed",
+    body: "Thanks for going ahead. Your job is confirmed and we will be in touch to arrange measuring up.",
+  },
+  MEASURED: {
+    subject: "We have measured up",
+    body: "We have taken the measurements for your job. Next we finalise the details before the stone is cut.",
+  },
+  FACTORY: {
+    subject: "Your stone is being made",
+    body: "Your job is now in the factory, where the stone is cut and finished to your measurements.",
+  },
+  READY_FOR_DISPATCH: {
+    subject: "Ready to install",
+    body: "Your stone is finished and ready to go. We will be in touch to book the installation.",
+  },
+  INVOICE: {
+    subject: "Your job is complete",
+    body: "Your job is complete. Thank you for choosing Haskel Project. Your invoice will follow separately.",
+  },
+};
+
+/** The email for a job entering `stage`, or null if the client does not hear about that stage. */
+export function stageEmail(
+  j: JobSummary,
+  stage: OrderStatus,
+  contact?: string | null,
+): { subject: string; text: string } | null {
+  const e = STAGE_EMAILS[stage];
+  if (!e) return null;
+  return {
+    subject: `${e.subject}: ${j.jobNumber}`,
+    text: [
+      `Hi ${firstName(j)},`,
+      "",
+      e.body,
+      "",
+      `  Job number: ${j.jobNumber}`,
+      `  Site: ${j.address}, ${j.suburb}`,
+      "",
+      contactLine(contact, "Any questions, let us know"),
       "",
       "Haskel Project",
     ].join("\n"),
@@ -201,7 +264,7 @@ export type PlannedEntry = {
 export function plannedEntries(j: JobSummary, opened: string, reminderDays: readonly number[]): PlannedEntry[] {
   const location = `${j.address}, ${j.suburb}`;
   const who = `${j.jobNumber} · ${j.clientName}`;
-  const description = [...detailLines(j), "", "Made by Haskel Ops when the job was opened."].join("\n");
+  const description = [...detailLines(j, true), "", "Made by Haskel Ops when the job was opened."].join("\n");
   const out: PlannedEntry[] = [{ key: "opened", day: opened, summary: `Opened · ${who}`, description, location }];
   if (!j.target) return out;
   out.push({ key: "due", day: j.target, summary: `Due · ${who}`, description, location });

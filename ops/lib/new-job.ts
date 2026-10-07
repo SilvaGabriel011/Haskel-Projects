@@ -197,9 +197,6 @@ export function validateNewJob(f: Record<string, unknown>, today = isoDay(new Da
   // ---- the target, its reminders, and the client's email
   const notices = readNoticeChoices(f, today);
   if (!notices.ok) return notices;
-  if (notices.value.emailClient && "create" in client && !client.create.email) {
-    return { ok: false, reason: "Add the client's email to send them the summary, or untick it." };
-  }
 
   return {
     ok: true,

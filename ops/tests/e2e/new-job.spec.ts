@@ -152,13 +152,16 @@ test("the target, its reminders and the email choice reach the job page", async 
   await page.selectOption("#jobType", "SPLASHBACK");
   await expect(page.locator("#targetDate")).toHaveValue(plus(14));
 
-  await expect(page.getByRole("checkbox", { name: "1 week before" })).toBeChecked();
+  // Reminders start unticked; tick the ones wanted.
+  for (const r of ["2 weeks before", "1 week before", "3 days before", "1 day before"]) {
+    await expect(page.getByRole("checkbox", { name: r })).not.toBeChecked();
+  }
+  await page.getByRole("checkbox", { name: "1 week before" }).check();
   await page.getByRole("checkbox", { name: "3 days before" }).check();
-  await page.getByRole("checkbox", { name: "1 day before" }).uncheck();
 
-  // CI has no mail service: the choice is shown, and off.
-  await expect(page.locator("#emailClient")).toBeDisabled();
-  await expect(page.getByText("Email is not set up yet")).toBeVisible();
+  // The client is emailed without anyone ticking anything; CI has no mail service, and says so.
+  await expect(page.getByText("The client is emailed automatically")).toBeVisible();
+  await expect(page.getByText(/Once email is set up/)).toBeVisible();
 
   await page.getByRole("button", { name: "Open the job" }).click();
   await page.waitForURL(/\/orders\/(?!new)[^/]+$/);

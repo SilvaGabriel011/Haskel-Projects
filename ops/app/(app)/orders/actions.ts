@@ -6,7 +6,7 @@ import { record } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { requireAdmin, requireUser } from "@/lib/guard";
 import { STAGE_LABEL } from "@/lib/pipeline";
-import { sendJobNotices } from "@/lib/job-notices-send";
+import { sendJobNotices, sendStageEmail } from "@/lib/job-notices-send";
 import { createJob, validateNewJob } from "@/lib/new-job";
 import { moveOrder } from "@/lib/order-move";
 import { releaseStock, reserveStock, type StockKind } from "@/lib/reservations";
@@ -31,6 +31,13 @@ export async function advanceOrder(orderId: string, to: OrderStatus) {
   if (!res.ok) return res;
   await record(user, "job.moved", `Moved ${await jobNumber(orderId)} to ${STAGE_LABEL[to]}`, `/orders/${orderId}`);
 
+  // The stages the client hears about email them. Never stops the move.
+  const mail = await sendStageEmail(orderId, to);
+  if (mail.email === "sent") {
+    await record(user, "job.emailed", `Emailed the client: ${await jobNumber(orderId)} is ${STAGE_LABEL[to]}`, `/orders/${orderId}`);
+  }
+  if (mail.detail) console.error(`Stage email for ${orderId}: ${mail.detail}`);
+
   revalidatePath("/orders");
   revalidatePath("/board");
   revalidatePath(`/orders/${orderId}`);
@@ -39,7 +46,7 @@ export async function advanceOrder(orderId: string, to: OrderStatus) {
     revalidatePath("/stock");
     revalidatePath("/offcuts");
   }
-  return { ok: true as const };
+  return { ok: true as const, email: mail.email };
 }
 
 /**
@@ -106,7 +113,7 @@ export async function openJob(form: Record<string, unknown>) {
   await record(me, "job.opened", `Opened ${res.jobNumber}`, `/orders/${res.orderId}`);
 
   // The job is open whatever happens here; the outcome goes to the job page.
-  const notices = await sendJobNotices(res.orderId, { emailClient: parsed.value.notices.emailClient });
+  const notices = await sendJobNotices(res.orderId);
   if (notices.email === "sent") {
     await record(me, "job.emailed", `Emailed ${res.jobNumber}'s summary to the client`, `/orders/${res.orderId}`);
   }

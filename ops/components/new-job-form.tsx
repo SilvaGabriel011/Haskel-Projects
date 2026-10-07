@@ -134,8 +134,6 @@ export function NewJobForm({
 
   // ---- after saving: the client's email and the calendar
   const clientEmail = existing ? picked?.email ?? "" : (v.email ?? "").trim();
-  const canEmail = mailReady && Boolean(clientEmail);
-  const emailClient = canEmail && v.emailClient !== "off";
   const reminders = (v.reminders ?? "").split(",").filter(Boolean).map(Number);
 
   const stoneType = (v.stoneType ?? "") as MaterialKind | "";
@@ -171,7 +169,7 @@ export function NewJobForm({
     // clientKind saying COMPANY.
     const clientKind = isCompany ? "COMPANY" : "PERSON";
     try {
-      const res = await openJob({ ...v, clientKind, emailClient: emailClient ? "on" : "" });
+      const res = await openJob({ ...v, clientKind });
       if (!res.ok) {
         setError(res.reason);
         setSaving(false);
@@ -668,26 +666,16 @@ export function NewJobForm({
           </p>
         </div>
 
-        <label className={`flex items-start gap-3 text-sm ${canEmail ? "" : "text-muted"}`}>
-          <input
-            id="emailClient"
-            type="checkbox"
-            className="mt-0.5 h-4 w-4 accent-rose"
-            disabled={!canEmail}
-            checked={emailClient}
-            onChange={(e) => set({ emailClient: e.target.checked ? "on" : "off" })}
-          />
-          <span>
-            <b className="text-ink">Email the client a summary of this job</b>
-            <span className="block text-xs text-ink-2">
-              {!mailReady
-                ? "Email is not set up yet (RESEND_API_KEY and MAIL_FROM)."
-                : clientEmail
-                  ? `Everything above, notes included, goes to ${clientEmail}.`
-                  : "No email address for this client."}
-            </span>
+        <p className="text-sm">
+          <b className="text-ink">The client is emailed automatically</b>
+          <span className="block text-xs text-ink-2">
+            {!mailReady
+              ? "Once email is set up (RESEND_API_KEY and MAIL_FROM). Until then nothing is sent."
+              : clientEmail
+                ? `A summary to ${clientEmail} now, and an update when the job is quoted, confirmed, measured, in the factory, ready to install and complete. Notes stay in the office.`
+                : "This client has no email address, so they will not be emailed."}
           </span>
-        </label>
+        </p>
       </Section>
 
       {error ? (

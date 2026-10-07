@@ -13,13 +13,15 @@ import {
   DEFAULT_REMINDERS,
   addDaysTo,
   isDay,
+  STAGE_EMAILS,
   plannedEntries,
   readNoticeChoices,
   reminderLabel,
+  stageEmail,
   summaryEmail,
   type JobSummary,
 } from "../lib/job-notices";
-import { sendJobNotices } from "../lib/job-notices-send";
+import { sendJobNotices, sendStageEmail } from "../lib/job-notices-send";
 import { createJob, validateNewJob } from "../lib/new-job";
 
 const job: JobSummary = {
@@ -55,16 +57,17 @@ describe("the days", () => {
 describe("what the form may ask for", () => {
   const today = "2031-03-15";
 
-  it("takes a target, its preset reminders, and the email choice", () => {
-    const r = readNoticeChoices({ targetDate: "2031-04-14", reminders: "1,7,7,5,abc", emailClient: "on" }, today);
+  it("takes a target and its preset reminders, with none ticked to start", () => {
+    const r = readNoticeChoices({ targetDate: "2031-04-14", reminders: "1,7,7,5,abc" }, today);
     assert.ok(r.ok);
-    assert.deepEqual(r.value, { target: "2031-04-14", reminderDays: [7, 1], emailClient: true });
+    assert.deepEqual(r.value, { target: "2031-04-14", reminderDays: [7, 1] });
+    assert.deepEqual(DEFAULT_REMINDERS, []);
   });
 
   it("drops reminders with no target to count back from", () => {
     const r = readNoticeChoices({ targetDate: "", reminders: "7,1" }, today);
     assert.ok(r.ok);
-    assert.deepEqual(r.value, { target: null, reminderDays: [], emailClient: false });
+    assert.deepEqual(r.value, { target: null, reminderDays: [] });
   });
 
   it("refuses a target that is not a day, has passed, or is years away", () => {
@@ -80,15 +83,12 @@ describe("what the form may ask for", () => {
     assert.ok(readNoticeChoices({ targetDate: today }, today).ok, "today is allowed");
   });
 
-  it("will not email a new client the form has no address for", () => {
+  it("opens a job for a new client with no email address", () => {
     const form = {
       clientMode: "new", clientKind: "PERSON", clientName: "Jo Smith", phone: "0412 345 678", source: "PHONE",
-      jobType: "REPAIR", address: "1 Test St", suburb: "Unley", emailClient: "on",
+      jobType: "REPAIR", address: "1 Test St", suburb: "Unley",
     };
-    const r = validateNewJob(form, today);
-    assert.ok(!r.ok);
-    assert.match(r.reason, /client's email/);
-    assert.ok(validateNewJob({ ...form, email: "jo@example.com" }, today).ok);
+    assert.ok(validateNewJob(form, today).ok);
   });
 });
 
@@ -105,18 +105,42 @@ describe("the client's email", () => {
       "Stone: Dekton Lunar · 20 mm · Matte",
       "Area: about 4.2 m²",
       "We aim to finish by: Mon, 14 Apr 2031",
-      "Notes: Undermount sink",
       "let us know: 0451 083 862.",
     ]) {
       assert.ok(text.includes(bit), bit);
     }
   });
 
+  it("never carries the office's notes", () => {
+    assert.ok(!summaryEmail(job).text.includes("Undermount sink"));
+  });
+
   it("says when the stone is not chosen, and leaves out what was not given", () => {
     const { text } = summaryEmail({ ...job, stone: null, sqm: null, notes: null, target: null, siteContactName: null, siteContactPhone: null });
     assert.ok(text.includes("Stone: not chosen yet"));
-    for (const gone of ["Area", "aim to finish", "Notes", "At the site", "let us know:"]) assert.ok(!text.includes(gone), gone);
-    assert.ok(text.includes("please let us know."));
+    for (const gone of ["Area", "aim to finish", "At the site", "let us know:"]) assert.ok(!text.includes(gone), gone);
+    assert.ok(text.includes("If anything here is not right, let us know."));
+  });
+});
+
+describe("the client's updates as the job moves", () => {
+  it("come at the stages that mean something to a client, and no others", () => {
+    assert.deepEqual(Object.keys(STAGE_EMAILS), ["QUOTED", "ORDER_ACTIVE", "MEASURED", "FACTORY", "READY_FOR_DISPATCH", "INVOICE"]);
+    for (const quiet of ["INITIAL", "QUOTE_REQUEST", "PURCHASE_ORDER", "DETAILS", "INSTALLATION", "LOST"] as const) {
+      assert.equal(stageEmail(job, quiet), null, quiet);
+    }
+  });
+
+  it("say what happened, with the job number and site, and no notes or money", () => {
+    const e = stageEmail(job, "FACTORY", "0451 083 862");
+    assert.ok(e);
+    assert.equal(e.subject, "Your stone is being made: HP-3103-001");
+    assert.match(e.text, /^Hi Dana,\n\nYour job is now in the factory/);
+    assert.ok(e.text.includes("Job number: HP-3103-001"));
+    assert.ok(e.text.includes("Site: 12 Example St, Stirling"));
+    assert.ok(e.text.includes("Any questions, let us know: 0451 083 862."));
+    assert.ok(!e.text.includes("Undermount sink"));
+    assert.ok(!/\$|quote of/i.test(stageEmail(job, "QUOTED")!.text));
   });
 });
 
@@ -137,6 +161,7 @@ describe("the calendar entries", () => {
     assert.equal(e[2].summary, "Reminder · HP-3103-001 · Hills Kitchens due in 1 week");
     assert.equal(e[0].location, "12 Example St, Stirling");
     assert.ok(e[2].description.startsWith("Due Mon, 14 Apr 2031."));
+    assert.ok(e[1].description.includes("Notes: Undermount sink"), "the office's notes are for the office's calendar");
   });
 
   it("leaves out reminders that would already have passed", () => {
@@ -255,7 +280,7 @@ describe("sending a new job's notices", () => {
     process.env.BUSINESS_CONTACT = "0451 083 862";
     const id = await open();
     const g = services();
-    const r = await sendJobNotices(id, { emailClient: true }, g.fetchFn, FAR);
+    const r = await sendJobNotices(id, g.fetchFn, FAR);
     assert.deepEqual(r, { email: "sent", calendar: "added" });
 
     const mail = g.calls.find((c) => c.url.includes("resend"));
@@ -274,27 +299,41 @@ describe("sending a new job's notices", () => {
     configure({ calendar: false, mail: false });
     const id = await open();
     const g = services();
-    assert.deepEqual(await sendJobNotices(id, { emailClient: true }, g.fetchFn, FAR), {
+    assert.deepEqual(await sendJobNotices(id, g.fetchFn, FAR), {
       email: "not-configured",
       calendar: "not-configured",
     });
     assert.equal(g.calls.length, 0);
   });
 
-  it("does not email when not asked to", async () => {
+  it("says so when the client has no email address", async () => {
+    configure({ calendar: false, mail: true });
+    const id = await open({ email: "" });
+    const g = services();
+    const r = await sendJobNotices(id, g.fetchFn, FAR);
+    assert.equal(r.email, "no-email");
+    assert.ok(!g.calls.some((c) => c.url.includes("resend")));
+  });
+
+  it("emails a stage update only for the stages the client hears about", async () => {
     configure({ calendar: false, mail: true });
     const id = await open();
     const g = services();
-    const r = await sendJobNotices(id, { emailClient: false }, g.fetchFn, FAR);
-    assert.equal(r.email, "skipped");
-    assert.ok(!g.calls.some((c) => c.url.includes("resend")));
+    assert.deepEqual(await sendStageEmail(id, "MEASURED", g.fetchFn), { email: "sent" });
+    const mail = g.calls.find((c) => c.url.includes("resend"));
+    assert.deepEqual(mail?.body?.to, ["jo@example.com"]);
+    assert.match(String(mail?.body?.subject), /^We have measured up: HP-/);
+
+    const quiet = services();
+    assert.deepEqual(await sendStageEmail(id, "PURCHASE_ORDER", quiet.fetchFn), { email: "skipped" });
+    assert.equal(quiet.calls.length, 0);
   });
 
   it("keeps the entries already made when a later one fails, and reports the failure", async () => {
     configure({ calendar: true, mail: false });
     const id = await open();
     const g = services({ match: "/events", okFirst: 2 });
-    const r = await sendJobNotices(id, { emailClient: false }, g.fetchFn, FAR);
+    const r = await sendJobNotices(id, g.fetchFn, FAR);
     assert.equal(r.calendar, "failed");
     assert.match(r.detail ?? "", /Calendar: Google said 500/);
     const o = await db.order.findUniqueOrThrow({ where: { id } });
@@ -305,7 +344,7 @@ describe("sending a new job's notices", () => {
     configure({ calendar: true, mail: true });
     const id = await open({ targetDate: "", reminders: "" });
     const g = services({ match: "resend" });
-    const r = await sendJobNotices(id, { emailClient: true }, g.fetchFn, FAR);
+    const r = await sendJobNotices(id, g.fetchFn, FAR);
     assert.equal(r.email, "failed");
     assert.equal(r.calendar, "added");
     const o = await db.order.findUniqueOrThrow({ where: { id } });
