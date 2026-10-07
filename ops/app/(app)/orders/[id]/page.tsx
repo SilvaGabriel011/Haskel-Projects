@@ -7,6 +7,7 @@ import { StageTimeline } from "@/components/stage-timeline";
 import { StockReserve } from "@/components/stock-reserve";
 import { Card, Empty, Pill, SectionTitle, dims, when } from "@/components/ui";
 import { formatDate, formatTime } from "@/lib/business-time";
+import { reminderLabel } from "@/lib/job-notices";
 import { requireAccess } from "@/lib/guard";
 import { LABOUR_RATE_CENTS, formatAud, marginCents, marginPct } from "@/lib/money";
 import { FINAL_STAGE, PIPELINE_LABEL, STATUS_LABEL, nextStage } from "@/lib/pipeline";
@@ -16,10 +17,43 @@ import { availableStock, heldForOrder } from "@/lib/reservations";
 
 export const metadata: Metadata = { title: "Job" };
 
-export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
+/** What New job reports after saving, in words; null when all went to plan or was not asked. */
+function openedNotice(q: Record<string, string | string[] | undefined>): { tone: "good" | "warn"; lines: string[] } | null {
+  if (q.opened !== "1") return null;
+  const good: Record<string, string> = {
+    sent: "The client has been emailed a summary.",
+    added: "Added to the company calendar.",
+  };
+  const bad: Record<string, string> = {
+    "email:failed": "The summary email could not be sent. The job is saved; email the client yourself.",
+    "email:not-configured": "Email is not set up, so the client was not emailed.",
+    "email:no-email": "The client has no email address, so they were not emailed.",
+    "calendar:failed": "Could not add it to the company calendar. Settings → Send a test event shows why.",
+  };
+  const lines = ["Job opened."];
+  let warn = false;
+  for (const key of ["email", "calendar"] as const) {
+    const v = String(q[key] ?? "");
+    if (good[v]) lines.push(good[v]);
+    else if (bad[`${key}:${v}`]) {
+      warn = true;
+      lines.push(bad[`${key}:${v}`]);
+    }
+  }
+  return { tone: warn ? "warn" : "good", lines };
+}
+
+export default async function OrderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requireAccess("/orders");
   const isAdmin = user.role === "ADMIN";
   const { id } = await params;
+  const notice = openedNotice(await searchParams);
   const order = await getOrderDetail(id, user.role);
   if (!order) notFound();
 
@@ -76,6 +110,15 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           {next ? <AdvanceButton orderId={order.id} to={next} label={`Move to ${STATUS_LABEL[next]}`} /> : null}
         </div>
       </header>
+
+      {notice ? (
+        <div
+          role="status"
+          className={`mt-5 rounded-xl border px-4 py-3 text-sm ${notice.tone === "warn" ? "border-rose bg-blush" : "border-line bg-white"}`}
+        >
+          {notice.lines.join(" ")}
+        </div>
+      ) : null}
 
       <StageTimeline rows={stages_} />
 
@@ -227,9 +270,19 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               {order.customer.contactName ? (
                 <div className="mt-1 text-ink-2">Contact: {order.customer.contactName}</div>
               ) : null}
-              <div className="mt-1 text-ink-2">{order.customer.phone}</div>
+              <a
+                href={`tel:${order.customer.phone.replace(/[^\d+]/g, "")}`}
+                className="mt-1 block text-ink-2 underline-offset-4 hover:text-rose hover:underline"
+              >
+                {order.customer.phone}
+              </a>
               {"email" in order.customer && order.customer.email ? (
-                <div className="text-ink-2">{order.customer.email}</div>
+                <a
+                  href={`mailto:${order.customer.email}?subject=${encodeURIComponent(`Your job ${order.jobNumber}`)}`}
+                  className="block break-all text-ink-2 underline-offset-4 hover:text-rose hover:underline"
+                >
+                  {order.customer.email}
+                </a>
               ) : null}
               <div className="mt-2 text-xs text-ink-2">{order.customer.suburb}</div>
               {isAdmin && "source" in order.customer && order.customer.source ? (
@@ -238,6 +291,28 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 </div>
               ) : null}
             </Card>
+
+            {order.targetCompletionAt || order.summaryEmailedAt ? (
+              <Card className="mt-3 p-5 text-sm">
+                {order.targetCompletionAt ? (
+                  <>
+                    <div className="font-semibold">
+                      Target: {formatDate(order.targetCompletionAt, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                    </div>
+                    <div className="mt-1 text-ink-2">
+                      {order.reminderDays.length
+                        ? `Reminders ${order.reminderDays.map(reminderLabel).join(", ")}`
+                        : "No reminders"}
+                    </div>
+                  </>
+                ) : null}
+                {order.summaryEmailedAt ? (
+                  <div className={order.targetCompletionAt ? "mt-2 text-xs text-ink-2" : "text-ink-2"}>
+                    Summary emailed to the client on {when(order.summaryEmailedAt)}
+                  </div>
+                ) : null}
+              </Card>
+            ) : null}
 
             {order.siteContactName || order.siteContactPhone ? (
               <>

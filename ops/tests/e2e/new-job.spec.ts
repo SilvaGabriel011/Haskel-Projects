@@ -75,6 +75,108 @@ test("the stone narrows step by step to what the colour is made in", async ({ pa
   expect(await options("finish")).toEqual(["Matte"]);
 });
 
+test("a stone is found by typing, sets the lists, and one not listed can be added", async ({ page }) => {
+  const stamp = Date.now().toString().slice(-7);
+  await page.goto("/orders/new");
+  const search = page.getByRole("combobox", { name: "Find a stone" });
+
+  // Typing finds a catalogue colour; picking it fills in the dropdowns.
+  await search.fill("lunar dek");
+  await page.getByRole("option", { name: /Dekton Lunar/ }).click();
+  await expect(page.locator("#stoneType")).toHaveValue("SINTERED");
+  await expect(page.locator("#stoneRange")).toHaveValue("dekton");
+  await expect(page.locator("#materialId")).toHaveValue("cat:dekton:Lunar");
+  await expect(page.locator("#thicknessMm")).toHaveValue("20");
+
+  // A name on no list is offered, picked with the keyboard, and takes any finish typed.
+  await search.fill(`Blue Bahia ${stamp}`);
+  await expect(page.getByRole("option", { name: /as a new stone/ })).toBeVisible();
+  await search.press("ArrowDown");
+  await search.press("Enter");
+  await expect(page.getByText(`New stone: Blue Bahia ${stamp}`)).toBeVisible();
+  await expect(page.locator("#stoneType")).toHaveCount(0);
+  await page.fill("#thicknessMm", "25");
+  await page.fill("#finish", "Brushed");
+
+  await page.selectOption("#customerId", { index: 1 });
+  await page.fill("#address", "1 Test St");
+  await page.fill("#suburb", "Unley");
+  await page.selectOption("#jobType", "VANITY_TOP");
+  await page.getByRole("button", { name: "Open the job" }).click();
+  await page.waitForURL(/\/orders\/(?!new)[^/]+$/);
+  await expect(page.getByText(`Blue Bahia ${stamp} · 25 mm · Brushed`)).toBeVisible();
+
+  // Next time, it is the most recent pick, before anything is typed.
+  await page.goto("/orders/new");
+  await page.getByRole("combobox", { name: "Find a stone" }).focus();
+  const listbox = page.getByRole("listbox", { name: "Stones" });
+  await expect(listbox.getByText("Recently chosen")).toBeVisible();
+  await expect(listbox.getByRole("option").first()).toContainText(`Blue Bahia ${stamp}`);
+});
+
+test("a client is found by typing, and one not on file starts a new profile", async ({ page }) => {
+  await page.goto("/orders/new");
+  const search = page.getByRole("combobox", { name: "Find a client" });
+
+  // By any part of the phone number, however it was written.
+  await search.fill("8356");
+  const found = page.getByRole("listbox", { name: "Clients" });
+  await found.getByRole("option", { name: "Seaview Builders" }).click();
+  await expect(page.locator("#customerId option:checked")).toContainText("Seaview Builders");
+  await expect(page.locator("#suburb")).toHaveValue("Glenelg");
+
+  // A name not on file offers a new profile, with the name filled in.
+  await search.fill("Jo Newperson");
+  await found.getByRole("option", { name: /Create a client profile “Jo Newperson”/ }).click();
+  await expect(page.locator("#clientName")).toHaveValue("Jo Newperson");
+});
+
+test("the target, its reminders and the email choice reach the job page", async ({ page }) => {
+  await page.goto("/orders/new");
+  await page.getByRole("combobox", { name: "Find a client" }).fill("hills");
+  await page.getByRole("listbox", { name: "Clients" }).getByRole("option", { name: "Hills Kitchens" }).click();
+  await page.fill("#address", "1 Test St");
+
+  // The kind of job sets a starting target: four weeks for a benchtop.
+  const today = await page.locator("#targetDate").getAttribute("min");
+  const plus = (days: number) => {
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  await page.selectOption("#jobType", "FULL_BENCHTOP");
+  await expect(page.locator("#targetDate")).toHaveValue(plus(28));
+  await page.getByRole("radio", { name: "2 weeks" }).click();
+  await expect(page.locator("#targetDate")).toHaveValue(plus(14));
+  // Choosing the job again leaves a target someone set alone.
+  await page.selectOption("#jobType", "SPLASHBACK");
+  await expect(page.locator("#targetDate")).toHaveValue(plus(14));
+
+  // Reminders start unticked; tick the ones wanted.
+  for (const r of ["2 weeks before", "1 week before", "3 days before", "1 day before"]) {
+    await expect(page.getByRole("checkbox", { name: r })).not.toBeChecked();
+  }
+  await page.getByRole("checkbox", { name: "1 week before" }).check();
+  await page.getByRole("checkbox", { name: "3 days before" }).check();
+
+  // The client is emailed without anyone ticking anything; CI has no mail service, and says so.
+  await expect(page.getByText("The client is emailed automatically")).toBeVisible();
+  await expect(page.getByText(/Once email is set up/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Open the job" }).click();
+  await page.waitForURL(/\/orders\/(?!new)[^/]+$/);
+  await expect(page.getByRole("status").filter({ hasText: "Job opened." })).toBeVisible();
+  await expect(page.getByText(/^Target: /)).toBeVisible();
+  await expect(page.getByText("Reminders 1 week before, 3 days before")).toBeVisible();
+
+  // The client's email and phone open the mail app and the dialler.
+  await expect(page.getByRole("link", { name: "jobs@hillskitchens.example.com" })).toHaveAttribute(
+    "href",
+    /^mailto:jobs@hillskitchens\.example\.com\?subject=Your%20job%20HP-/,
+  );
+  await expect(page.getByRole("link", { name: "08 8370 1200" })).toHaveAttribute("href", "tel:0883701200");
+});
+
 test("the suburb follows the client picked, takes a town off the list, and a typed one stays", async ({ page }) => {
   await page.goto("/orders/new");
   // The two seeded companies live in different suburbs.

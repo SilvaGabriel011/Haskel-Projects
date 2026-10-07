@@ -322,6 +322,17 @@ model Order {
   completedAt DateTime?
   lostReason  String?
 
+  /// When the office aims to have it done, set on New job. A day, kept as
+  /// midnight in the business's zone. Not a promise to the client.
+  targetCompletionAt DateTime?
+  /// Days before the target to put a reminder in the calendar: [7, 1].
+  reminderDays       Int[]     @default([])
+  /// The calendar events New job made for this job (opened, due, reminders),
+  /// so they can be found again. Empty when the calendar is not set up.
+  calendarEventIds   String[]  @default([])
+  /// When the summary went to the client by email; null if it never did.
+  summaryEmailedAt   DateTime?
+
   customer  Customer        @relation(fields: [customerId], references: [id])
   booking   BookingRequest?
   lines     OrderLine[]

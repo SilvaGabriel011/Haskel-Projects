@@ -229,6 +229,47 @@ export async function pushBooking(
   }
 }
 
+/**
+ * Write an all-day entry marked free ("transparent"): it shows in the diary
+ * without blocking anyone's time. Used for the entries New job makes (the day
+ * a job opened, its target day and reminders before it; lib/job-notices.ts).
+ * Returns a result rather than throwing, like pushBooking.
+ */
+export async function pushAllDay(
+  entry: { day: string; summary: string; description: string; location: string },
+  fetchFn: Fetch = fetch,
+): Promise<SyncResult> {
+  const sa = serviceAccount();
+  const cal = calendarId();
+  const tz = businessTimezone();
+  if (!sa || !cal || !tz) return { ok: false, reason: "not-configured" };
+
+  // All-day events end on the day after, exclusive.
+  const [y, m, d] = entry.day.split("-").map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+  try {
+    const token = await accessToken(sa, fetchFn);
+    const res = await fetchFn(`${API}/calendars/${encodeURIComponent(cal)}/events`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        summary: entry.summary,
+        description: entry.description,
+        location: entry.location,
+        start: { date: entry.day },
+        end: { date: next },
+        transparency: "transparent",
+      }),
+    });
+    if (!res.ok) return { ok: false, reason: "failed", detail: await googleError(res) };
+    const event = (await res.json()) as { id?: string };
+    if (!event.id) return { ok: false, reason: "failed", detail: "Google answered without an event id." };
+    return { ok: true, googleEventId: event.id };
+  } catch (e) {
+    return { ok: false, reason: "failed", detail: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** Remove an event this app made. Already gone counts as removed. */
 export async function removeBooking(googleEventId: string, fetchFn: Fetch = fetch): Promise<{ ok: boolean; detail?: string }> {
   const sa = serviceAccount();

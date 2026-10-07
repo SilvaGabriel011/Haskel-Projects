@@ -36,6 +36,10 @@ const SHARED_ORDER_SELECT = {
   // The homeowner, when a company is the client. Installers need it to get in.
   siteContactName: true,
   siteContactPhone: true,
+  // Set on New job: when it should be done, and who was told.
+  targetCompletionAt: true,
+  reminderDays: true,
+  summaryEmailedAt: true,
   customer: { select: { id: true, name: true, phone: true, suburb: true } },
 } satisfies Prisma.OrderSelect;
 
@@ -239,7 +243,34 @@ export async function stageHistory(orderId: string) {
 /** Clients for the New job picker: companies and people, by name. Admin only. */
 export async function listClientOptions() {
   return db.customer.findMany({
-    select: { id: true, kind: true, name: true, contactName: true, phone: true, suburb: true },
+    select: { id: true, kind: true, name: true, contactName: true, phone: true, email: true, suburb: true },
     orderBy: { name: "asc" },
   });
+}
+
+/** The clients of the most recent jobs, newest first, each once: "Recent clients" on New job. */
+export async function recentClientIds(take = 5) {
+  const rows = await db.order.findMany({
+    select: { customerId: true },
+    orderBy: { createdAt: "desc" },
+    distinct: ["customerId"],
+    take,
+  });
+  return rows.map((r) => r.customerId);
+}
+
+/**
+ * The stone lines of the most recent jobs, newest first, for "Recently
+ * chosen" and "Most chosen" on New job. Only what names the stone: no
+ * prices. The last 300 lines are a few months of work, which is what a habit
+ * looks like; older picks should not crowd out this season's colours.
+ */
+export async function recentStoneLines() {
+  const lines = await db.orderLine.findMany({
+    where: { OR: [{ materialId: { not: null } }, { description: { contains: " · " } }] },
+    select: { materialId: true, description: true, order: { select: { createdAt: true } } },
+    orderBy: { order: { createdAt: "desc" } },
+    take: 300,
+  });
+  return lines.map((l) => ({ materialId: l.materialId, description: l.description, at: l.order.createdAt }));
 }
