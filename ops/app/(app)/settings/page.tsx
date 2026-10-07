@@ -9,6 +9,7 @@ import { demoModeEnabled, workspaceDomain } from "@/lib/access-config";
 import { requireAdmin } from "@/lib/guard";
 import { recentActivity } from "@/lib/activity";
 import { calendarId, calendarMissing, serviceAccount } from "@/lib/google-calendar";
+import { mailConfigured } from "@/lib/mail";
 import { formatDate } from "@/lib/business-time";
 import { CURRENT, RELEASES, releaseDate } from "@/lib/releases";
 import { db } from "@/lib/db";
@@ -144,6 +145,18 @@ export default async function SettingsPage() {
               </div>
             </div>
             {demo ? <Pill tone="warn">on</Pill> : <Pill tone="good">off</Pill>}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+            <div>
+              <div className="text-sm font-semibold">Email (PIN reset codes)</div>
+              <div className="text-xs text-ink-2">
+                {mailConfigured()
+                  ? `On. "Forgot PIN?" emails a one-time code to the shared login, from ${process.env.MAIL_FROM}.`
+                  : "Not set up: RESEND_API_KEY and MAIL_FROM. Until then a forgotten PIN is reset by an admin, above."}
+              </div>
+            </div>
+            {mailConfigured() ? <Pill tone="good">on</Pill> : <Pill tone="warn">not set up</Pill>}
           </div>
 
           <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">

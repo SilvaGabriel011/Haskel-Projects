@@ -6,6 +6,7 @@ import { auth, unstable_update } from "@/auth";
 import { record } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { PIN_LOCK_MS, checkPin, makePickTicket, wrongPinMessage } from "@/lib/pin";
+import { completePinReset, requestPinReset } from "@/lib/pin-reset";
 
 /**
  * Pick yourself on a shared login, with your PIN.
@@ -56,4 +57,25 @@ export async function switchPerson() {
   if (!session?.user) redirect("/login");
   await unstable_update({ switchPerson: true } as never);
   redirect("/who");
+}
+
+/** "Forgot PIN?": email a one-time code to this login for the person picked. */
+export async function forgotPin(personId: string) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  return requestPinReset(session.user.owner, String(personId));
+}
+
+/** The code from the email and a new PIN: set it, and carry on as that person. */
+export async function resetPinWithCode(personId: string, code: string, pin: string): Promise<{ ok: false; reason: string }> {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const owner = session.user.owner;
+
+  const res = await completePinReset(owner, String(personId), String(code ?? ""), String(pin ?? ""));
+  if (!res.ok) return res;
+
+  await unstable_update({ pickTicket: makePickTicket(res.personId, owner) } as never);
+  await record({ id: res.personId, name: res.name, owner }, "person.pin.reset", `Reset their PIN with a code emailed to ${owner}`);
+  redirect("/dashboard");
 }
