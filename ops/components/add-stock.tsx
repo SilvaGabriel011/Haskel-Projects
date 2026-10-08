@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createStock } from "@/app/(app)/stock/actions";
-import { coloursOf, finishOptions, supplierOptions, thicknessOptions } from "@/lib/stone";
+import { coloursOf, finishOptions, groupedOptions, supplierOptions, thicknessOptions } from "@/lib/stone";
+import { PickOrType } from "@/components/pick-or-type";
 import { catalogueKey, fromCatalogueKey, isCatalogueKey, onFileFor, rangesOf } from "@/lib/stone-catalogue";
 import {
   MATERIAL_KINDS,
@@ -100,10 +101,17 @@ export function AddStock({
   const usingNewMaterial = choice === NEW_MATERIAL || catalogued !== null;
   const stoneType = String(values.stoneType ?? "") as MaterialKind | "";
   const colours = coloursOf(materials, stoneType);
-  const thicknesses = catalogued
-    ? [...catalogued.thicknesses]
-    : thicknessOptions(materials.map((m) => m.thicknessMm));
-  const finishes = catalogued ? [...catalogued.finishes] : finishOptions(materials.map((m) => m.finish));
+  // A catalogue colour's own sizes and finishes first, then everything else
+  // the trade sells; anything else can be typed in.
+  const thicknessGroups = groupedOptions(
+    catalogued ? [...catalogued.thicknesses] : [],
+    thicknessOptions(materials.map((m) => m.thicknessMm)),
+  );
+  const thicknessChoices = { madeIn: thicknessGroups.madeIn.map(String), others: thicknessGroups.others.map(String) };
+  const finishChoices = groupedOptions(
+    catalogued ? [...catalogued.finishes] : [],
+    finishOptions(materials.map((m) => m.finish)),
+  );
   const suppliers = supplierOptions(materials.map((m) => m.supplier));
   const newSupplier = values.supplierChoice === NEW_SUPPLIER || suppliers.length === 0;
   // An offcut comes off a slab of its own colour; a colour new today has none.
@@ -545,34 +553,28 @@ export function AddStock({
                           ) : null}
                         </Field>
                         <Field id="materialFinish" label="Finish">
-                          <select
+                          <PickOrType
                             id="materialFinish"
+                            label="Finish"
                             className={field}
                             value={String(values.materialFinish ?? "")}
-                            onChange={(e) => set("materialFinish", e.target.value)}
-                          >
-                            <option value="">Pick one…</option>
-                            {finishes.map((f) => (
-                              <option key={f} value={f}>
-                                {f}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(x) => set("materialFinish", x)}
+                            {...finishChoices}
+                            placeholder="e.g. Flamed"
+                          />
                         </Field>
                         <Field id="materialThicknessMm" label="Thickness">
-                          <select
+                          <PickOrType
                             id="materialThicknessMm"
+                            label="Thickness"
                             className={field}
                             value={String(values.materialThicknessMm ?? "")}
-                            onChange={(e) => set("materialThicknessMm", e.target.value)}
-                          >
-                            <option value="">Pick one…</option>
-                            {thicknesses.map((t) => (
-                              <option key={t} value={t}>
-                                {t} mm
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(x) => set("materialThicknessMm", x)}
+                            {...thicknessChoices}
+                            format={(x) => `${x} mm`}
+                            numeric
+                            placeholder="e.g. 15"
+                          />
                         </Field>
                       </div>
                       <Field id="materialCostPerSqm" label="Cost per m²" hint="What you pay, not what you charge.">
@@ -651,34 +653,28 @@ export function AddStock({
                     <>
                       <div className="grid gap-5 sm:grid-cols-2">
                         <Field id="thicknessMm" label="Thickness">
-                          <select
+                          <PickOrType
                             id="thicknessMm"
+                            label="Thickness"
                             className={field}
                             value={String(values.thicknessMm ?? "")}
-                            onChange={(e) => set("thicknessMm", e.target.value)}
-                          >
-                            <option value="">Pick one…</option>
-                            {thicknesses.map((t) => (
-                              <option key={t} value={t}>
-                                {t} mm
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(x) => set("thicknessMm", x)}
+                            {...thicknessChoices}
+                            format={(x) => `${x} mm`}
+                            numeric
+                            placeholder="e.g. 15"
+                          />
                         </Field>
                         <Field id="finish" label="Finish">
-                          <select
+                          <PickOrType
                             id="finish"
+                            label="Finish"
                             className={field}
                             value={String(values.finish ?? "")}
-                            onChange={(e) => set("finish", e.target.value)}
-                          >
-                            <option value="">Pick one…</option>
-                            {finishes.map((f) => (
-                              <option key={f} value={f}>
-                                {f}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(x) => set("finish", x)}
+                            {...finishChoices}
+                            placeholder="e.g. Flamed"
+                          />
                         </Field>
                       </div>
 

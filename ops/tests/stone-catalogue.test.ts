@@ -12,10 +12,12 @@ import {
   catalogueKey,
   colourOptions,
   fromCatalogueKey,
+  offMakersList,
   onFileFor,
   rangeOptions,
   sizeOptions,
 } from "../lib/stone-catalogue";
+import { groupedOptions, thicknessOptions } from "../lib/stone";
 
 const lunar = "cat:dekton:Lunar";
 const onFile = [
@@ -89,9 +91,9 @@ describe("the stone dropdowns", () => {
     assert.equal(onFileFor({ range, colour }, [{ name: "Lunar", kind: "NATURAL" }]), undefined);
   });
 
-  it("offer only the thicknesses and finishes a colour is made in, and start from one", () => {
+  it("start from the thicknesses and finishes a colour is made in", () => {
     const s = sizeOptions(lunar, []);
-    assert.deepEqual(s.thicknesses, [12, 20, 30]);
+    assert.deepEqual(s.thicknesses, [8, 12, 20, 30]);
     assert.deepEqual(s.finishes, ["Matte"]);
     assert.equal(s.thicknessMm, "20");
     assert.equal(s.finish, "Matte");
@@ -115,5 +117,50 @@ describe("the stone dropdowns", () => {
   it("offer nothing before a colour", () => {
     assert.deepEqual(sizeOptions("", onFile).thicknesses, []);
     assert.deepEqual(colourOptions("SINTERED", "", onFile), []);
+  });
+});
+
+describe("sizes and finishes off the maker's list", () => {
+  it("are flagged, not refused, for a colour the catalogue knows", () => {
+    assert.equal(offMakersList(lunar, 20, "Matte"), null);
+    assert.equal(
+      offMakersList(lunar, 40, "Matte"),
+      "Dekton Lunar is not listed in 40 mm. Check with the supplier before quoting.",
+    );
+    assert.equal(
+      offMakersList(lunar, 40, "Polished"),
+      "Dekton Lunar is not listed in 40 mm or a polished finish. Check with the supplier before quoting.",
+    );
+    assert.equal(offMakersList(lunar, "", ""), null, "nothing chosen yet, nothing to say");
+  });
+
+  it("count what a colour on file is recorded as, on top of the maker's list", () => {
+    const kreta = [{ id: "k", name: "Dekton Kreta", kind: "SINTERED" as const, thicknessMm: 40, finish: "Matte" }];
+    assert.equal(offMakersList("k", 40, "Matte", kreta), null);
+    assert.match(offMakersList("k", 6, "Matte", kreta) ?? "", /not listed in 6 mm/);
+  });
+
+  it("say nothing for a stone the catalogue does not know", () => {
+    const local = [{ id: "l", name: "Local Bluestone", kind: "NATURAL" as const, thicknessMm: 30, finish: "Honed" }];
+    assert.equal(offMakersList("l", 25, "Flamed", local), null);
+    assert.equal(offMakersList("new:Blue Bahia", 25, "Flamed"), null);
+  });
+});
+
+describe("the choices offered", () => {
+  it("put what a colour is made in first, then every other size, with no repeats", () => {
+    const g = groupedOptions([12, 20, 30], thicknessOptions());
+    assert.deepEqual(g.madeIn, [12, 20, 30]);
+    assert.deepEqual(g.others, [6, 8, 13, 40]);
+  });
+
+  it("match finishes whatever their capitals", () => {
+    const g = groupedOptions(["Silk"], ["silk", "Polished"]);
+    assert.deepEqual(g.others, ["Polished"]);
+  });
+
+  it("list Dekton in the four benchtop thicknesses and Neolith in three, from the makers' ranges", () => {
+    assert.deepEqual(sizeOptions("cat:dekton:Lunar", []).thicknesses, [8, 12, 20, 30]);
+    assert.deepEqual(sizeOptions("cat:neolith:Superwhite", []).thicknesses, [6, 12, 20]);
   });
 });

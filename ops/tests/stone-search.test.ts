@@ -87,7 +87,7 @@ describe("adding a stone that is not listed", () => {
 
   it("can be any of the usual thicknesses and finishes, starting at 20 mm", () => {
     const s = sizeOptions("new:Blue Bahia", []);
-    assert.deepEqual(s.thicknesses, [12, 20, 30, 40]);
+    assert.deepEqual(s.thicknesses, [6, 8, 12, 13, 20, 30, 40]);
     assert.ok(s.finishes.includes("Honed") && s.finishes.includes("Leathered"));
     assert.equal(s.thicknessMm, "20");
     assert.deepEqual(sizeOptions("new: ", []).thicknesses, []);

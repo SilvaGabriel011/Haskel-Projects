@@ -27,6 +27,7 @@ The two deploy independently and neither can break the other.
 | 12 | Grouping jobs that are near each other | Done |
 | 13 | Finding a stone by typing on New job; adding one that isn't listed | Done |
 | 14 | Finding a client by typing; the client's summary email and the job's calendar entries | Done; email needs a Resend key (below) |
+| 15 | Any thickness and finish, makers' lists first; edge profiles | Done |
 
 Every screen now runs on real (seeded) data. No shells left.
 
@@ -184,6 +185,14 @@ order. Before anything is typed, each box offers the recent picks, and the
 stone box the most-chosen too. A stone on no list can be added as typed; it
 is named on the job with no material behind it, like a catalogue colour not
 yet on the rack, so nothing reads as free stone in Financials.
+
+**Thickness and finish** (on New job and Add stock) offer what the colour is
+made in first, then every other size and finish the trade sells (6 to 40 mm),
+then "Type another…". A size or finish off the maker's list is flagged to
+check with the supplier, never refused: ranges change, and the office knows
+its suppliers. The makers' lists are in `lib/stone-catalogue.ts`, with their
+sources. New job also takes an optional **edge** (arris to 60 mm mitred, or
+typed), written on the job's stone line.
 
 **After saving** sets a target completion day (presets of 1, 2, 4 and 6
 weeks; it starts at 2 weeks for small work and 4 for a benchtop or

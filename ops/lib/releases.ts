@@ -33,6 +33,28 @@ const EMPLOYEE: readonly Role[] = ["EMPLOYEE"];
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "1.10.0",
+    date: "2026-10-08",
+    title: "More thicknesses, finishes and edges",
+    items: [
+      {
+        text: "Thickness and finish offer what the colour is made in first, then every other size and finish the trade sells, and “Type another…” for anything else. A size or finish off the maker's list is flagged to check with the supplier, not refused.",
+        roles: ADMIN,
+        href: "/orders/new",
+      },
+      {
+        text: "New job has an Edge: arris, pencil round, half round, bullnose, bevel, 40 or 60 mm mitred, 40 mm laminated, or your own. It shows on the job with the stone.",
+        roles: ADMIN,
+        href: "/orders/new",
+      },
+      {
+        text: "Add stock takes any thickness and finish the same way.",
+        roles: ADMIN,
+        href: "/stock",
+      },
+    ],
+  },
+  {
     version: "1.9.0",
     date: "2026-10-07",
     title: "Forgot PIN",

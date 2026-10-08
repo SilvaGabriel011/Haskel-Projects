@@ -12,11 +12,18 @@
  * mineral surfaces that replaced it. Porcelain and sintered stone are exempt.
  *
  * Sources, checked October 2026: caesarstone.com.au (colour pages give 20 mm,
- * Polished, or Rough for the concrete looks), cosentino.com/en-au (Dekton in
- * 12, 20 and 30 mm for benchtops; finish per colour from stockists),
- * neolith.com (finish per colour). Natural stone is by stone, not by brand:
- * 20 and 30 mm slabs, polished, honed or leathered. Ranges change; a colour
- * missing here is added to stock through Add stock as before.
+ * Polished, or Rough for the concrete looks; 13 and 30 mm exist overseas on
+ * selected colours only), cosentino.com/en-au (Dekton in 4, 8, 12, 20 and
+ * 30 mm, not every colour in every one; 4 mm is for furniture, so it is left
+ * out here), an Australian Neolith distributor's brochure (3, 6, 12 and 20 mm;
+ * 3 mm is cladding, left out) and neolith.com (finish per colour). Natural
+ * stone is by stone, not by brand: 20 and 30 mm slabs, polished, honed or
+ * leathered.
+ *
+ * These are what a colour is MADE in, offered first. They are not a fence:
+ * the forms also offer every other size and finish the trade sells
+ * (lib/stone.ts), and take one typed in, flagging it as off the maker's list
+ * rather than refusing it. Ranges change, and the office knows its suppliers.
  */
 import type { MaterialKind } from "@prisma/client";
 
@@ -98,7 +105,7 @@ export const STONE_CATALOGUE: readonly CatalogueRange[] = [
     label: "Dekton",
     supplier: "Cosentino",
     fullName: (c) => `Dekton ${c}`,
-    thicknesses: [12, 20, 30],
+    thicknesses: [8, 12, 20, 30],
     finishes: ["Matte"],
     colours: [
       { name: "Adia" },
@@ -134,7 +141,7 @@ export const STONE_CATALOGUE: readonly CatalogueRange[] = [
     label: "Neolith",
     supplier: "Neolith",
     fullName: (c) => `Neolith ${c}`,
-    thicknesses: [12, 20],
+    thicknesses: [6, 12, 20],
     finishes: ["Silk", "Polished"],
     colours: [
       { name: "Arctic White", thicknesses: [12], finishes: ["Silk", "Polished", "Satin"] },
@@ -319,3 +326,41 @@ export function sizeOptions(value: string, materials: readonly FileMaterial[]) {
   }
 }
 
+
+/**
+ * A word of caution when a catalogue colour is given a thickness or finish
+ * its maker does not list: allowed, since ranges change and the office knows
+ * its suppliers, but worth checking before it is quoted. Null when it is on
+ * the list, or the colour is not one the catalogue knows.
+ */
+export function offMakersList(
+  value: string,
+  thicknessMm: number | string,
+  finish: string,
+  materials: readonly FileMaterial[] = [],
+): string | null {
+  let made: { name: string; thicknesses: readonly number[]; finishes: readonly string[] } | null = null;
+  if (isCatalogueKey(value)) {
+    const pick = fromCatalogueKey(value);
+    if (pick) made = { name: pick.fullName, thicknesses: pick.thicknesses, finishes: pick.finishes };
+  } else {
+    const m = materials.find((x) => x.id === value);
+    const match = m ? catalogueMatch(m) : null;
+    if (m && match) {
+      // What it is on file as counts as made, on top of the maker's list.
+      made = {
+        name: m.name,
+        thicknesses: [m.thicknessMm, ...(match.colour.thicknesses ?? match.range.thicknesses)],
+        finishes: [m.finish, ...(match.colour.finishes ?? match.range.finishes)],
+      };
+    }
+  }
+  if (!made) return null;
+  const t = Number(thicknessMm);
+  const f = finish.trim().toLowerCase();
+  const offT = Number.isFinite(t) && t > 0 && !made.thicknesses.includes(t);
+  const offF = f !== "" && !made.finishes.some((x) => x.toLowerCase() === f);
+  if (!offT && !offF) return null;
+  const what = [offT ? `${t} mm` : null, offF ? `a ${f} finish` : null].filter(Boolean).join(" or ");
+  return `${made.name} is not listed in ${what}. Check with the supplier before quoting.`;
+}
