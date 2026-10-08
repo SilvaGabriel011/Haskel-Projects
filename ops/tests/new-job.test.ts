@@ -81,8 +81,9 @@ describe("the New job form", () => {
       [{ ...person, materialId: "m1", thicknessMm: "20", finish: "Polished", sqm: "lots" }, /square metres/],
       [{ ...person, clientKind: "COMPANY", siteContactPhone: "12" }, /site contact/],
       // A catalogue colour holds to what it is made in.
-      [{ ...person, materialId: "cat:dekton:Lunar", thicknessMm: "40", finish: "Matte" }, /not made 40 mm/],
-      [{ ...person, materialId: "cat:dekton:Lunar", thicknessMm: "20", finish: "Polished" }, /polished finish/],
+      [{ ...person, materialId: "m1", thicknessMm: "2", finish: "Matte" }, /thickness/],
+      [{ ...person, materialId: "m1", thicknessMm: "101", finish: "Matte" }, /thickness/],
+      [{ ...person, materialId: "m1", thicknessMm: "20", finish: "Matte", edge: "x".repeat(41) }, /edge/],
       [{ ...person, materialId: "cat:dekton:Nobody", thicknessMm: "20", finish: "Matte" }, /not on the list/],
       // A stone typed in still needs a name, a thickness and a finish.
       [{ ...person, materialId: "new: ", thicknessMm: "20", finish: "Honed" }, /stone's name/],
@@ -99,6 +100,14 @@ describe("the New job form", () => {
 });
 
 describe("what the form tidies rather than refuses", () => {
+  it("takes a size or finish off the maker's list, and an edge, rather than refusing them", () => {
+    const r = validateNewJob({
+      ...person, materialId: "cat:dekton:Lunar", thicknessMm: "40", finish: "Polished", edge: "40 mm mitred",
+    });
+    assert.ok(r.ok, r.ok ? "" : r.reason);
+    assert.deepEqual(r.value.stone, { materialId: "cat:dekton:Lunar", thicknessMm: 40, finish: "Polished", edge: "40 mm mitred", sqm: 0 });
+  });
+
   it("reads 2,4 as 2.4 square metres, and refuses what is not a plain decimal", () => {
     const stone = { ...person, materialId: "m1", thicknessMm: "20", finish: "Polished" };
     const r = validateNewJob({ ...stone, sqm: "2,4" });
@@ -125,7 +134,7 @@ describe("what the form tidies rather than refuses", () => {
 
 describe("the stone dropdowns", () => {
   it("offer the standard thicknesses plus any on file, in order", () => {
-    assert.deepEqual(thicknessOptions([20, 25, 20]), [12, 20, 25, 30, 40]);
+    assert.deepEqual(thicknessOptions([20, 25, 20]), [6, 8, 12, 13, 20, 25, 30, 40]);
   });
 
   it("offer the standard finishes plus others on file, without repeats", () => {
@@ -145,6 +154,11 @@ describe("the stone dropdowns", () => {
 
   it("describe the choice on the job line", () => {
     assert.equal(describeStone({ name: "Calacatta Gold" }, 30, "Honed"), "Calacatta Gold · 30 mm · Honed");
+    assert.equal(
+      describeStone({ name: "Calacatta Gold" }, 20, "Honed", "40 mm mitred"),
+      "Calacatta Gold · 20 mm · Honed · 40 mm mitred edge",
+    );
+    assert.equal(describeStone({ name: "X" }, 20, "Honed", "Bullnose edge"), "X · 20 mm · Honed · Bullnose edge");
   });
 });
 
@@ -250,6 +264,16 @@ describe("opening the job", () => {
     const [line] = await db.orderLine.findMany({ where: { orderId: r.orderId } });
     assert.equal(line.materialId, material.id);
     assert.equal(line.description, `${material.name} · 20 mm · Polished`);
+  });
+
+  it("writes the edge on the stone line", async () => {
+    const r = await open({
+      ...person, clientName: `${TAG} Edge`, phone: phone(9),
+      materialId: "cat:dekton:Lunar", thicknessMm: "20", finish: "Matte", edge: "60 mm mitred",
+    });
+    assert.ok(r.ok, r.ok ? "" : r.reason);
+    const [line] = await db.orderLine.findMany({ where: { orderId: r.orderId } });
+    assert.equal(line.description, "Dekton Lunar · 20 mm · Matte · 60 mm mitred edge");
   });
 
   it("links a catalogue colour to the material on file of that colour", async () => {

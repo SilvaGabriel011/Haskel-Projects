@@ -15,8 +15,18 @@ import {
 } from "@/lib/job-options";
 import { PIPELINE_LABEL } from "@/lib/pipeline";
 import { MATERIAL_KINDS, MATERIAL_KIND_LABEL } from "@/lib/stock-input";
-import { type StoneMaterial, isNewStoneKey, newStoneKey, newStoneName } from "@/lib/stone";
-import { colourOptions, rangeOptions, sizeOptions } from "@/lib/stone-catalogue";
+import {
+  EDGE_PROFILES,
+  type StoneMaterial,
+  finishOptions,
+  groupedOptions,
+  isNewStoneKey,
+  newStoneKey,
+  newStoneName,
+  thicknessOptions,
+} from "@/lib/stone";
+import { PickOrType } from "@/components/pick-or-type";
+import { colourOptions, offMakersList, rangeOptions, sizeOptions } from "@/lib/stone-catalogue";
 import { allStoneChoices, chosenStones, type PastStoneLine, type StoneChoice } from "@/lib/stone-search";
 import { SearchBox, type SearchItem } from "@/components/search-box";
 import { StoneSearch } from "@/components/stone-search";
@@ -143,6 +153,16 @@ export function NewJobForm({
   const colours = colourOptions(stoneType, v.stoneRange ?? "", materials);
   const sizes = sizeOptions(v.materialId ?? "", materials);
   const typedStone = isNewStoneKey(v.materialId ?? "") ? newStoneName(v.materialId ?? "") : "";
+  // What this colour is made in first, then everything else the trade sells.
+  const thicknessGroups = groupedOptions(sizes.thicknesses, thicknessOptions());
+  const thicknessChoices = {
+    madeIn: thicknessGroups.madeIn.map(String),
+    others: thicknessGroups.others.map(String),
+    ...(typedStone ? { madeInLabel: "Usual sizes" } : {}),
+  };
+  const finishGroups = groupedOptions(sizes.finishes, finishOptions());
+  const finishChoices = { madeIn: finishGroups.madeIn, others: finishGroups.others };
+  const offList = v.materialId ? offMakersList(v.materialId, v.thicknessMm ?? "", v.finish ?? "", materials) : null;
 
   // The search box offers every stone the dropdowns do, headed by the office's habits.
   const stoneChoices = useMemo(() => allStoneChoices(materials), [materials]);
@@ -509,77 +529,47 @@ export function NewJobForm({
               </Field>
             </>
           )}
-          {typedStone ? (
-            <>
-              <Field id="thicknessMm" label="Thickness (mm)">
-                <input
-                  id="thicknessMm"
-                  inputMode="numeric"
-                  list="thickness-options"
-                  autoComplete="off"
-                  className={field}
-                  value={v.thicknessMm ?? ""}
-                  onChange={(e) => set({ thicknessMm: e.target.value.replace(/\D/g, "") })}
-                />
-                <datalist id="thickness-options">
-                  {sizes.thicknesses.map((t) => (
-                    <option key={t} value={t} />
-                  ))}
-                </datalist>
-              </Field>
-              <Field id="finish" label="Finish" hint="Pick one or type your own.">
-                <input
-                  id="finish"
-                  list="finish-options"
-                  autoComplete="off"
-                  maxLength={40}
-                  className={field}
-                  value={v.finish ?? ""}
-                  onChange={(e) => set({ finish: e.target.value })}
-                />
-                <datalist id="finish-options">
-                  {sizes.finishes.map((f) => (
-                    <option key={f} value={f} />
-                  ))}
-                </datalist>
-              </Field>
-            </>
-          ) : (
-            <>
-              <Field id="thicknessMm" label="Thickness">
-                <select
-                  id="thicknessMm"
-                  className={field}
-                  disabled={!v.materialId}
-                  value={v.thicknessMm ?? ""}
-                  onChange={(e) => set({ thicknessMm: e.target.value })}
-                >
-                  <option value="">{v.materialId ? "Pick one…" : "Pick the colour first"}</option>
-                  {sizes.thicknesses.map((t) => (
-                    <option key={t} value={t}>
-                      {t} mm
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field id="finish" label="Finish">
-                <select
-                  id="finish"
-                  className={field}
-                  disabled={!v.materialId}
-                  value={v.finish ?? ""}
-                  onChange={(e) => set({ finish: e.target.value })}
-                >
-                  <option value="">{v.materialId ? "Pick one…" : "Pick the colour first"}</option>
-                  {sizes.finishes.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </>
-          )}
+          <Field id="thicknessMm" label="Thickness">
+            <PickOrType
+              id="thicknessMm"
+              label="Thickness"
+              className={field}
+              disabled={!v.materialId}
+              emptyLabel={v.materialId ? "Pick one…" : "Pick the colour first"}
+              value={v.thicknessMm ?? ""}
+              onChange={(x) => set({ thicknessMm: x })}
+              {...thicknessChoices}
+              format={(x) => `${x} mm`}
+              numeric
+              placeholder="e.g. 15"
+            />
+          </Field>
+          <Field id="finish" label="Finish">
+            <PickOrType
+              id="finish"
+              label="Finish"
+              className={field}
+              disabled={!v.materialId}
+              emptyLabel={v.materialId ? "Pick one…" : "Pick the colour first"}
+              value={v.finish ?? ""}
+              onChange={(x) => set({ finish: x })}
+              {...finishChoices}
+              placeholder="e.g. Flamed"
+            />
+          </Field>
+          <Field id="edge" label="Edge" hint="Optional. A 40 mm look is a 20 mm slab with a built-up edge.">
+            <PickOrType
+              id="edge"
+              label="Edge"
+              className={field}
+              disabled={!v.materialId}
+              emptyLabel="Not chosen yet"
+              value={v.edge ?? ""}
+              onChange={(x) => set({ edge: x })}
+              madeIn={[...EDGE_PROFILES]}
+              placeholder="e.g. Ogee"
+            />
+          </Field>
           <Field id="sqm" label="Area (m²)" hint="Optional, a rough figure is fine.">
             <input
               id="sqm"
@@ -598,9 +588,14 @@ export function NewJobForm({
             silica-free ranges are listed.
           </p>
         ) : null}
+        {offList ? (
+          <p role="status" className="rounded-xl border border-rose bg-blush px-4 py-3 text-sm">
+            {offList}
+          </p>
+        ) : null}
         <p className="text-sm text-ink-2">
-          Thicknesses and finishes are what each colour is made in. A colour not listed can be typed into Find a
-          stone and added.
+          Each colour's own thicknesses and finishes come first, then the others the trade sells. Anything else
+          can be typed in. A colour not listed can be typed into Find a stone and added.
         </p>
       </Section>
 

@@ -52,27 +52,59 @@ test("a company's job opens with the homeowner and the stone attached", async ({
   await expect(page.getByText(/· 30 mm ·/)).toBeVisible();
 });
 
-test("the stone narrows step by step to what the colour is made in", async ({ page }) => {
+test("the stone narrows step by step, offering first what the colour is made in", async ({ page }) => {
   await page.goto("/orders/new");
   const options = (id: string) =>
     page.locator(`#${id} option:not([value=""])`).evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+  // What a colour is made in sits in its own group, above everything else the trade sells.
+  const madeIn = (id: string) =>
+    page.locator(`#${id} optgroup[label="Made in"] option`).evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
 
   await page.selectOption("#stoneType", "SINTERED");
   expect(await options("stoneRange")).toEqual(expect.arrayContaining(["dekton", "neolith"]));
   await page.selectOption("#stoneRange", "neolith");
   await page.selectOption("#materialId", "cat:neolith:Arctic White");
-  // Made 12 mm only, so it is picked; and only its own finishes are offered.
+  // Made 12 mm only, so it is picked; its own finishes come first.
   await expect(page.locator("#thicknessMm")).toHaveValue("12");
-  expect(await options("thicknessMm")).toEqual(["12"]);
-  expect(await options("finish")).toEqual(["Silk", "Polished", "Satin"]);
+  expect(await madeIn("thicknessMm")).toEqual(["12"]);
+  expect(await madeIn("finish")).toEqual(["Silk", "Polished", "Satin"]);
+  // The rest are still there, and anything else can be typed.
+  expect(await options("thicknessMm")).toEqual(expect.arrayContaining(["20", "30", "40", "__other"]));
 
   // Changing the brand clears the colour and what followed it.
   await page.selectOption("#stoneRange", "dekton");
   await expect(page.locator("#materialId")).toHaveValue("");
   await expect(page.locator("#thicknessMm")).toBeDisabled();
   await page.selectOption("#materialId", "cat:dekton:Lunar");
-  expect(await options("thicknessMm")).toEqual(["12", "20", "30"]);
-  expect(await options("finish")).toEqual(["Matte"]);
+  expect(await madeIn("thicknessMm")).toEqual(["8", "12", "20", "30"]);
+  expect(await madeIn("finish")).toEqual(["Matte"]);
+});
+
+test("a size off the maker's list is flagged, a size not listed can be typed, and the edge goes on the job", async ({
+  page,
+}) => {
+  await page.goto("/orders/new");
+  await page.selectOption("#customerId", { index: 1 });
+  await page.fill("#address", "1 Test St");
+  await page.fill("#suburb", "Unley");
+  await page.selectOption("#jobType", "VANITY_TOP");
+  await page.selectOption("#stoneType", "SINTERED");
+  await page.selectOption("#stoneRange", "dekton");
+  await page.selectOption("#materialId", "cat:dekton:Lunar");
+
+  // 40 mm is offered, under the other sizes, and flagged rather than refused.
+  await page.selectOption("#thicknessMm", "40");
+  await expect(page.getByRole("status").filter({ hasText: "Dekton Lunar is not listed in 40 mm" })).toBeVisible();
+
+  // A size on no list is typed in.
+  await page.selectOption("#thicknessMm", "__other");
+  await page.getByRole("textbox", { name: "Thickness, typed in" }).fill("15");
+  await expect(page.getByRole("status").filter({ hasText: "not listed in 15 mm" })).toBeVisible();
+
+  await page.selectOption("#edge", "40 mm mitred");
+  await page.getByRole("button", { name: "Open the job" }).click();
+  await page.waitForURL(/\/orders\/(?!new)[^/]+$/);
+  await expect(page.getByText("Dekton Lunar · 15 mm · Matte · 40 mm mitred edge")).toBeVisible();
 });
 
 test("a stone is found by typing, sets the lists, and one not listed can be added", async ({ page }) => {
@@ -95,8 +127,9 @@ test("a stone is found by typing, sets the lists, and one not listed can be adde
   await search.press("Enter");
   await expect(page.getByText(`New stone: Blue Bahia ${stamp}`)).toBeVisible();
   await expect(page.locator("#stoneType")).toHaveCount(0);
-  await page.fill("#thicknessMm", "25");
-  await page.fill("#finish", "Brushed");
+  await page.selectOption("#thicknessMm", "__other");
+  await page.getByRole("textbox", { name: "Thickness, typed in" }).fill("25");
+  await page.selectOption("#finish", "Brushed");
 
   await page.selectOption("#customerId", { index: 1 });
   await page.fill("#address", "1 Test St");
@@ -246,10 +279,14 @@ test("adding stock picks the stone from dropdowns", async ({ page }) => {
   // Thickness and finish are dropdowns, already set from the colour.
   await expect(page.locator("select#thicknessMm")).not.toHaveValue("");
   await expect(page.locator("select#finish")).not.toHaveValue("");
+  // A thickness on no list is typed in, and read back before anything is written.
+  await page.selectOption("select#thicknessMm", "__other");
+  await page.getByRole("textbox", { name: "Thickness, typed in" }).fill("18");
   await page.fill("#widthMm", "600");
   await page.fill("#lengthMm", "900");
   await page.fill("#rack", "Z9");
   await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("dialog")).toContainText("18 mm");
   await page.getByRole("button", { name: "Put it on the rack" }).click();
   await expect(page.getByRole("dialog").getByRole("status")).toContainText("is on the rack");
 });

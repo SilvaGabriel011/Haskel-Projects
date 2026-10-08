@@ -48,7 +48,7 @@ export type NewJobInput = {
    * (lib/stone-catalogue.ts) not yet on file, which is "cat:range:colour",
    * or one typed in that is on no list, which is "new:name".
    */
-  stone: { materialId: string; thicknessMm: number; finish: string; sqm: number } | null;
+  stone: { materialId: string; thicknessMm: number; finish: string; edge: string | null; sqm: number } | null;
   /** Target completion, its reminders, and whether to email the client a summary. */
   notices: NoticeChoices;
 };
@@ -171,18 +171,15 @@ export function validateNewJob(f: Record<string, unknown>, today = isoDay(new Da
       return { ok: false, reason: "Give the stone's name, up to 80 characters." };
     }
 
-    // A catalogue colour is only made in some thicknesses and finishes; the
-    // form offers only those, and this holds to it.
-    if (isCatalogueKey(materialId)) {
-      const pick = fromCatalogueKey(materialId);
-      if (!pick) return { ok: false, reason: "That colour is not on the list. Pick it again." };
-      if (!pick.thicknesses.includes(thicknessMm)) {
-        return { ok: false, reason: `${pick.fullName} is not made ${thicknessMm} mm thick.` };
-      }
-      if (!pick.finishes.includes(finish)) {
-        return { ok: false, reason: `${pick.fullName} does not come in a ${finish.toLowerCase()} finish.` };
-      }
+    // A catalogue colour must be one the catalogue has. Its thickness and
+    // finish need not be on the maker's list: the form flags one that is not
+    // (offMakersList), since ranges change and the office knows its suppliers.
+    if (isCatalogueKey(materialId) && !fromCatalogueKey(materialId)) {
+      return { ok: false, reason: "That colour is not on the list. Pick it again." };
     }
+
+    const edge = str(f.edge);
+    if (edge.length > MAX.finish) return { ok: false, reason: "That edge is too long." };
 
     // "2,4" is how half the world writes 2.4. Anything else that is not a
     // plain decimal ("1e2", "0x10") is a typo, not a number to guess at.
@@ -191,7 +188,7 @@ export function validateNewJob(f: Record<string, unknown>, today = isoDay(new Da
     if (!/^\d*\.?\d*$/.test(rawSqm) || !Number.isFinite(sqm) || sqm < 0 || sqm > 200) {
       return { ok: false, reason: "Area should be square metres, such as 2.4." };
     }
-    stone = { materialId, thicknessMm, finish, sqm: Math.round(sqm * 100) / 100 };
+    stone = { materialId, thicknessMm, finish, edge: edge || null, sqm: Math.round(sqm * 100) / 100 };
   }
 
   // ---- the target, its reminders, and the client's email
@@ -361,7 +358,7 @@ export async function createJob(input: NewJobInput, userId: string, now = new Da
           await tx.orderLine.create({
             data: {
               orderId: order.id,
-              description: describeStone({ name }, input.stone.thicknessMm, input.stone.finish),
+              description: describeStone({ name }, input.stone.thicknessMm, input.stone.finish, input.stone.edge),
               materialId,
               sqm: input.stone.sqm,
             },
