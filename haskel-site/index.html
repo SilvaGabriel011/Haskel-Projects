@@ -443,7 +443,7 @@
       if(panel) panel.hidden = !on;
       if(on && focus) t.focus();
     });
-    if(found) syncNav(id);
+    if(found){ syncNav(id); applyPanelLock(id); }
     return found;
   }
 
@@ -473,22 +473,30 @@
     });
   });
 
-  /* trava a altura no painel mais alto para a pagina nao pular ao trocar de aba */
+  /* trava a altura no painel mais alto para a pagina nao pular ao trocar de aba.
+     Why us fica de fora: sao 4 blocos curtos de texto, e travado na altura de
+     Services ele ficava com um buraco enorme embaixo */
+  var lockedHeight = '';
+  function applyPanelLock(id){
+    if(panels) panels.style.minHeight = id === 'why' ? '' : lockedHeight;
+  }
   function lockPanelHeight(){
     if(!panels) return;
+    lockedHeight = '';
     panels.style.minHeight = '';
     if(window.innerWidth < 760) return;
-    var tallest = 0, activeId = null;
-    tabs.forEach(function(t){ if(t.getAttribute('aria-selected') === 'true') activeId = t.getAttribute('aria-controls'); });
+    var tallest = 0;
     tabs.forEach(function(t){
-      var pn = document.getElementById(t.getAttribute('aria-controls'));
-      if(!pn) return;
+      var id = t.getAttribute('aria-controls');
+      var pn = document.getElementById(id);
+      if(!pn || id === 'why') return;
       var wasHidden = pn.hidden;
       pn.hidden = false;
       tallest = Math.max(tallest, pn.getBoundingClientRect().height);
       pn.hidden = wasHidden;
     });
-    if(activeId) panels.style.minHeight = Math.round(tallest) + 'px';
+    if(tallest) lockedHeight = Math.round(tallest) + 'px';
+    applyPanelLock(activePanel());
   }
 
   /* hash na URL e cliques da nav abrem a aba certa */
